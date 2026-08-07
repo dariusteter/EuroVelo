@@ -1,0 +1,1479 @@
+<!doctype html>
+<html lang="en" data-visualize-standalone>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Bicycle Trip Planner Demo</title>
+<style>:root {
+  color-scheme: light dark;
+  background-color: transparent !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --main-surface-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: light-dark(rgb(26 28 31), rgb(255 255 255));
+  --card: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --card-foreground: var(--foreground);
+  --popover: light-dark(rgb(255 255 255), rgb(45 45 45));
+  --popover-foreground: var(--foreground);
+  --primary: light-dark(rgb(51 156 255), rgb(131 195 255));
+  --primary-foreground: light-dark(rgb(255 255 255), rgb(13 13 13));
+  --secondary: light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%));
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: light-dark(
+    rgb(26 28 31 / 49.4%),
+    rgb(255 255 255 / 49.8%)
+  );
+  --accent: light-dark(rgb(229 242 255), rgb(13 39 63));
+  --accent-foreground: var(--primary);
+  --destructive: light-dark(rgb(226 85 7), rgb(255 133 73));
+  --border: light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%));
+  --input: light-dark(
+    rgb(26 28 31 / 11.8%),
+    color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+  );
+  --ring: light-dark(rgb(51 156 255), rgb(131 195 255 / 76%));
+  --font-size-base: 14px;
+  --red: light-dark(rgb(186 38 35), rgb(250 66 62));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: 10px;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 17'%3E%3Cpath d='M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z'/%3E%3C/svg%3E");
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+  --color-background-primary: var(--background);
+  --color-text-primary: var(--foreground);
+  --color-border-secondary: var(--border);
+}
+
+:root[data-visualize-standalone] {
+  background-color: var(--background) !important;
+}
+
+/* Generic mobile code-block hosts provide light/dark mode but no series palette.
+   AppBlock hosts set all six variables themselves. */
+:root:not([data-app-block-surface]) {
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(#f3883b, #f59a56);
+  --viz-series-3: light-dark(#5dc977, #74d58b);
+  --viz-series-4: light-dark(#eb77b1, #f08fc0);
+  --viz-series-5: light-dark(#9b79ec, #aa91ef);
+  --viz-series-6: light-dark(#3ab9b1, #5acbc2);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html > body {
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+:root:not([data-app-block-surface]) > body {
+  padding: 12px;
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive > .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align="right"]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align="center"]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget > :not(.card) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* The bundled tooltip runtime owns [data-tooltip]. AppBlock's CSS-only
+   pseudo-tooltip can widen dense grids even while hidden. */
+main [data-tooltip]::after {
+  content: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls > .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls > .form-label > :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--interactive-label-primary-default, var(--primary-foreground));
+  background: var(--interactive-bg-primary-default, var(--foreground));
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(
+    in srgb,
+    var(--interactive-label-primary-default, var(--primary-foreground)) 50%,
+    transparent
+  );
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type="file"] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type="file"]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type="file"]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: "";
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type="radio"]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: "";
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+    [aria-pressed="true"],
+    [aria-selected="true"],
+    .is-selected
+  ) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed="true"], [aria-selected="true"], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget > svg {
+  width: 100%;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+</style>
+</head>
+<body>
+<div id="veloplan-demo">
+  <style>
+    #veloplan-demo { color: var(--foreground); font-family: inherit; }
+    #veloplan-demo * { box-sizing: border-box; }
+    #veloplan-demo .vp-shell { display: grid; gap: 18px; }
+    #veloplan-demo .vp-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    #veloplan-demo .vp-brand { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+    #veloplan-demo .vp-mark { width: 34px; height: 34px; display: grid; place-items: center; background: var(--primary); color: var(--primary-foreground); border-radius: 50%; }
+    #veloplan-demo .vp-tabs { display: flex; gap: 4px; padding: 3px; background: var(--muted); border-radius: 999px; }
+    #veloplan-demo .vp-tabs .btn { border-radius: 999px; }
+    #veloplan-demo .vp-screen[hidden] { display: none; }
+    #veloplan-demo .vp-plan-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 24px; align-items: start; }
+    #veloplan-demo .vp-form { display: grid; gap: 18px; }
+    #veloplan-demo .vp-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    #veloplan-demo .vp-range-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    #veloplan-demo .vp-range-head { display: flex; justify-content: space-between; gap: 8px; }
+    #veloplan-demo .vp-choice-row { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+    #veloplan-demo .vp-route-preview { min-height: 390px; position: relative; overflow: hidden; border-radius: 18px; background: color-mix(in srgb, var(--muted) 72%, var(--background)); }
+    #veloplan-demo .vp-route-preview svg { width: 100%; height: 390px; display: block; }
+    #veloplan-demo .vp-preview-note { position: absolute; inset: auto 18px 18px 18px; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 12px 14px; background: color-mix(in srgb, var(--card) 90%, transparent); color: var(--card-foreground); border-radius: 12px; }
+    #veloplan-demo .vp-preview-note strong { display: block; font-weight: 500; }
+    #veloplan-demo .vp-mini-stats { display: flex; gap: 14px; flex-wrap: wrap; }
+    #veloplan-demo .vp-mini-stats span { white-space: nowrap; }
+    #veloplan-demo .vp-workspace { display: grid; grid-template-columns: 210px minmax(0, 1fr) 250px; gap: 14px; align-items: start; }
+    #veloplan-demo .vp-days { display: grid; gap: 7px; }
+    #veloplan-demo .vp-day { text-align: left; width: 100%; display: grid; gap: 2px; }
+    #veloplan-demo .vp-day small { color: var(--muted-foreground); }
+    #veloplan-demo .vp-day[aria-pressed="true"] small { color: var(--primary-foreground); opacity: .8; }
+    #veloplan-demo .vp-map-wrap { display: grid; gap: 10px; }
+    #veloplan-demo .vp-map-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    #veloplan-demo .vp-map-head h2 { margin: 0; }
+    #veloplan-demo .vp-legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted-foreground); }
+    #veloplan-demo .vp-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    #veloplan-demo .vp-swatch { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    #veloplan-demo .vp-map { position: relative; min-height: 360px; overflow: hidden; border-radius: 18px; background: color-mix(in srgb, var(--muted) 70%, var(--background)); }
+    #veloplan-demo .vp-map svg { width: 100%; height: 360px; display: block; }
+    #veloplan-demo .vp-poi { cursor: pointer; }
+    #veloplan-demo .vp-poi circle:first-of-type { stroke: var(--background); stroke-width: 5; }
+    #veloplan-demo .vp-poi:focus circle:first-of-type { stroke: var(--ring); stroke-width: 7; }
+    #veloplan-demo .vp-poi text { fill: var(--foreground); font-size: 12px; font-weight: 500; paint-order: stroke; stroke: var(--background); stroke-width: 4px; stroke-linejoin: round; }
+    #veloplan-demo .vp-route-line { fill: none; stroke: var(--viz-series-1); stroke-width: 6; stroke-linecap: round; }
+    #veloplan-demo .vp-road { fill: none; stroke: var(--border); stroke-width: 2; }
+    #veloplan-demo .vp-river { fill: none; stroke: var(--viz-series-2); stroke-width: 10; opacity: .18; }
+    #veloplan-demo .vp-town { fill: var(--muted-foreground); font-size: 12px; }
+    #veloplan-demo .vp-rider { fill: var(--primary); stroke: var(--background); stroke-width: 4; pointer-events: none; }
+    #veloplan-demo .vp-profile { position: relative; }
+    #veloplan-demo .vp-profile svg { width: 100%; height: 150px; display: block; touch-action: none; }
+    #veloplan-demo .vp-profile .vp-area { fill: color-mix(in srgb, var(--viz-series-1) 18%, transparent); }
+    #veloplan-demo .vp-profile .vp-line { fill: none; stroke: var(--viz-series-1); stroke-width: 3; }
+    #veloplan-demo .vp-profile .vp-grid { stroke: var(--border); stroke-width: 1; }
+    #veloplan-demo .vp-profile text { fill: var(--muted-foreground); font-size: 11px; }
+    #veloplan-demo .vp-profile-marker { stroke: var(--foreground); stroke-width: 1.5; opacity: 0; }
+    #veloplan-demo .vp-profile-dot { fill: var(--foreground); opacity: 0; }
+    #veloplan-demo .vp-profile:hover .vp-profile-marker,
+    #veloplan-demo .vp-profile:hover .vp-profile-dot { opacity: 1; }
+    #veloplan-demo .vp-details { display: grid; gap: 14px; }
+    #veloplan-demo .vp-details h3 { margin: 0; }
+    #veloplan-demo .vp-rating { display: flex; align-items: center; gap: 7px; }
+    #veloplan-demo .vp-stars { letter-spacing: 1px; color: var(--foreground); }
+    #veloplan-demo .vp-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    #veloplan-demo .vp-contact { display: grid; gap: 8px; }
+    #veloplan-demo .vp-contact a { display: inline-flex; align-items: center; gap: 7px; }
+    #veloplan-demo .vp-detail-empty { color: var(--muted-foreground); }
+    #veloplan-demo .vp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    #veloplan-demo .vp-share { max-width: 760px; margin: 0 auto; display: grid; gap: 18px; }
+    #veloplan-demo .vp-share-map { min-height: 270px; overflow: hidden; border-radius: 18px; background: color-mix(in srgb, var(--muted) 72%, var(--background)); }
+    #veloplan-demo .vp-share-map svg { width: 100%; height: 270px; display: block; }
+    #veloplan-demo .vp-toast { position: absolute; right: 12px; top: 12px; max-width: 260px; padding: 10px 12px; border-radius: 10px; background: var(--foreground); color: var(--background); opacity: 0; transform: translateY(-6px); pointer-events: none; transition: .18s ease; z-index: 2; }
+    #veloplan-demo .vp-toast.is-visible { opacity: 1; transform: translateY(0); }
+    #veloplan-demo .vp-relative { position: relative; }
+    #veloplan-demo .vp-muted { color: var(--muted-foreground); }
+    #veloplan-demo .vp-section-label { margin: 0 0 8px; font-weight: 500; }
+    #veloplan-demo .vp-divider { height: 1px; background: var(--border); }
+    @media (max-width: 760px) {
+      #veloplan-demo .vp-plan-grid, #veloplan-demo .vp-workspace { grid-template-columns: 1fr; }
+      #veloplan-demo .vp-days { grid-template-columns: repeat(4, minmax(130px, 1fr)); overflow-x: auto; padding-bottom: 4px; }
+      #veloplan-demo .vp-details { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 500px) {
+      #veloplan-demo .vp-field-grid, #veloplan-demo .vp-range-row, #veloplan-demo .vp-details { grid-template-columns: 1fr; }
+      #veloplan-demo .vp-preview-note { align-items: flex-start; flex-direction: column; }
+      #veloplan-demo .vp-map, #veloplan-demo .vp-map svg { min-height: 320px; height: 320px; }
+    }
+  </style>
+
+  <div class="vp-shell vp-relative">
+    <div class="vp-top">
+      <div class="vp-brand"><span class="vp-mark"><i data-lucide="bike" aria-hidden="true"></i></span><span>VeloPlan Europe</span></div>
+      <nav class="vp-tabs" aria-label="Prototype screens">
+        <button class="btn btn-primary" type="button" data-screen="plan" aria-pressed="true">Plan</button>
+        <button class="btn" type="button" data-screen="itinerary" aria-pressed="false">Itinerary</button>
+        <button class="btn" type="button" data-screen="share" aria-pressed="false">Shared trip</button>
+      </nav>
+    </div>
+
+    <section class="vp-screen" data-panel="plan">
+      <div class="vp-plan-grid">
+        <form class="vp-form" id="vp-plan-form">
+          <div>
+            <p class="vp-section-label">Where are you riding?</p>
+            <div class="vp-field-grid">
+              <label class="form-label">Start
+                <select class="form-select" id="vp-start">
+                  <option>Vienna, Austria</option>
+                  <option>Vienna, France</option>
+                  <option>Vienna, Italy</option>
+                </select>
+              </label>
+              <label class="form-label">Destination
+                <select class="form-select" id="vp-end">
+                  <option>Budapest, Hungary</option>
+                  <option>Budapest, Georgia</option>
+                </select>
+              </label>
+            </div>
+            <div class="text-small vp-muted">Matching cities are shown with country so similarly named places are easy to distinguish.</div>
+          </div>
+
+          <div>
+            <p class="vp-section-label">Daily distance</p>
+            <div class="vp-range-row">
+              <label class="form-label"><span class="vp-range-head"><span>Minimum</span><strong id="vp-min-value">45 km</strong></span>
+                <input class="form-range" id="vp-min" type="range" min="25" max="80" value="45" step="5">
+              </label>
+              <label class="form-label"><span class="vp-range-head"><span>Maximum</span><strong id="vp-max-value">75 km</strong></span>
+                <input class="form-range" id="vp-max" type="range" min="50" max="120" value="75" step="5">
+              </label>
+            </div>
+          </div>
+
+          <fieldset>
+            <legend class="vp-section-label">Surface preference</legend>
+            <div class="vp-choice-row">
+              <label class="form-check"><input class="form-check-input" type="radio" name="surface" value="paths" checked><span class="form-check-label">Bike paths first</span></label>
+              <label class="form-check"><input class="form-check-input" type="radio" name="surface" value="gravel"><span class="form-check-label">Gravel welcome</span></label>
+              <label class="form-check"><input class="form-check-input" type="radio" name="surface" value="roads"><span class="form-check-label">Roads are OK</span></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend class="vp-section-label">Lodging options</legend>
+            <div class="vp-choice-row">
+              <label class="form-check"><input class="form-check-input" type="checkbox" checked><span class="form-check-label">Camping</span></label>
+              <label class="form-check"><input class="form-check-input" type="checkbox" checked><span class="form-check-label">Hostel</span></label>
+              <label class="form-check"><input class="form-check-input" type="checkbox" checked><span class="form-check-label">Guest house</span></label>
+              <label class="form-check"><input class="form-check-input" type="checkbox"><span class="form-check-label">Hotel</span></label>
+            </div>
+          </fieldset>
+
+          <button class="btn btn-primary btn-block" type="submit"><i data-lucide="route" aria-hidden="true"></i> Generate my trip</button>
+        </form>
+
+        <div class="vp-route-preview" aria-label="Route preview from Vienna to Budapest">
+          <svg viewBox="0 0 560 390" role="img" aria-label="Schematic route preview following the Danube from Vienna to Budapest">
+            <path class="vp-river" d="M-20 238 C85 168 121 292 224 220 S386 159 585 218"/>
+            <path class="vp-road" d="M30 80 C130 125 190 80 285 125 S440 166 540 126"/>
+            <path class="vp-road" d="M68 345 C150 292 215 335 310 284 S452 312 530 263"/>
+            <path class="vp-route-line" d="M58 190 C110 165 137 225 190 213 C246 200 247 260 311 232 C372 205 385 178 438 199 C474 213 495 194 518 174"/>
+            <circle cx="58" cy="190" r="8" fill="var(--foreground)"/><circle cx="518" cy="174" r="8" fill="var(--foreground)"/>
+            <circle cx="190" cy="213" r="6" fill="var(--viz-series-3)"/><circle cx="311" cy="232" r="6" fill="var(--viz-series-3)"/><circle cx="438" cy="199" r="6" fill="var(--viz-series-3)"/>
+            <text class="vp-town" x="44" y="170">Vienna</text><text class="vp-town" x="169" y="192">Bratislava</text><text class="vp-town" x="289" y="257">Győr</text><text class="vp-town" x="415" y="177">Esztergom</text><text class="vp-town" x="474" y="151">Budapest</text>
+          </svg>
+          <div class="vp-preview-note">
+            <div><strong id="vp-preview-title">4 relaxed days</strong><span class="text-small vp-muted" id="vp-preview-copy">Mostly traffic-free Danube paths</span></div>
+            <div class="vp-mini-stats text-small"><span>284 km</span><span>1,460 m ↑</span><span>4 stages</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="vp-screen" data-panel="itinerary" hidden>
+      <div class="vp-workspace">
+        <aside class="vp-days" aria-label="Trip days" id="vp-days"></aside>
+        <main class="vp-map-wrap">
+          <div class="vp-map-head">
+            <div><h2 id="vp-day-title">Vienna → Bratislava</h2><span class="text-small vp-muted" id="vp-day-summary">68 km · 240 m ascent · 4h 10m riding</span></div>
+            <div class="vp-legend text-small"><span><i class="vp-swatch" style="background:var(--viz-series-3)"></i> Food</span><span><i class="vp-swatch" style="background:var(--viz-series-4)"></i> Stay</span><span><i class="vp-swatch" style="background:var(--viz-series-5)"></i> See</span></div>
+          </div>
+          <div class="vp-map" id="vp-map">
+            <div class="vp-toast" id="vp-toast" role="status" aria-live="polite"></div>
+            <svg id="vp-map-svg" viewBox="0 0 640 360" role="img" aria-label="Interactive schematic route map with restaurant, lodging, and attraction recommendations">
+              <path class="vp-river" d="M-30 225 C95 145 132 298 252 213 S425 155 675 224"/>
+              <path class="vp-road" d="M-10 82 C125 115 191 67 307 119 S510 172 660 105"/>
+              <path class="vp-road" d="M26 332 C160 277 247 337 371 276 S536 318 675 267"/>
+              <path id="vp-map-route" class="vp-route-line" d="M48 225 C121 175 170 252 244 218 C319 183 349 243 419 208 C493 171 532 205 590 166"/>
+              <text class="vp-town" x="34" y="204">Vienna</text><text class="vp-town" x="535" y="142">Bratislava</text>
+              <g id="vp-poi-layer"></g>
+              <circle id="vp-rider" class="vp-rider" cx="48" cy="225" r="8" opacity="0"/>
+            </svg>
+          </div>
+          <div class="vp-profile" id="vp-profile" aria-label="Interactive elevation profile. Move across the chart to locate the same point on the map.">
+            <svg viewBox="0 0 640 150" role="img" aria-labelledby="vp-profile-title">
+              <title id="vp-profile-title">Day 1 elevation profile, 68 kilometres</title>
+              <line class="vp-grid" x1="42" y1="28" x2="624" y2="28"/><line class="vp-grid" x1="42" y1="82" x2="624" y2="82"/><line class="vp-grid" x1="42" y1="128" x2="624" y2="128"/>
+              <text x="4" y="32">220 m</text><text x="4" y="86">160 m</text><text x="4" y="132">100 m</text>
+              <path id="vp-profile-area" class="vp-area" d="M42 108 L90 99 L138 104 L186 79 L234 93 L282 88 L330 105 L378 72 L426 78 L474 92 L522 69 L570 83 L624 58 L624 128 L42 128 Z"/>
+              <path id="vp-profile-line" class="vp-line" d="M42 108 L90 99 L138 104 L186 79 L234 93 L282 88 L330 105 L378 72 L426 78 L474 92 L522 69 L570 83 L624 58"/>
+              <line id="vp-profile-marker" class="vp-profile-marker" x1="42" y1="20" x2="42" y2="128"/><circle id="vp-profile-dot" class="vp-profile-dot" cx="42" cy="108" r="5"/>
+              <text x="42" y="146">0</text><text x="323" y="146">34 km</text><text x="590" y="146">68 km</text>
+              <rect id="vp-profile-hit" x="42" y="18" width="582" height="112" fill="transparent"/>
+            </svg>
+            <div class="text-small vp-muted" id="vp-profile-readout" aria-live="polite">Move across the elevation profile to follow the route on the map.</div>
+          </div>
+        </main>
+        <aside class="card vp-details" id="vp-details">
+          <div><span class="viz-badge" id="vp-kind">Lunch</span><h3 id="vp-poi-name">Gasthaus zum Goldenen Anker</h3><div class="text-small vp-muted" id="vp-poi-distance">Near the midpoint · 35 km</div></div>
+          <div class="vp-rating"><span class="vp-stars" aria-label="4.7 out of 5 stars">★★★★★</span><strong id="vp-rating">4.7</strong><span class="text-small vp-muted" id="vp-review-count">(842)</span></div>
+          <div class="vp-tags" id="vp-tags"><span class="viz-badge">Austrian</span><span class="viz-badge">Bike parking</span></div>
+          <p id="vp-poi-copy">A riverside lunch stop with a shaded terrace and quick regional dishes.</p>
+          <div class="vp-contact"><a href="https://example.com" target="_blank" rel="noreferrer" id="vp-website"><i data-lucide="globe" aria-hidden="true"></i> Website</a><a href="tel:+4315550142" id="vp-phone"><i data-lucide="phone" aria-hidden="true"></i> +43 1 555 0142</a></div>
+          <div class="vp-divider"></div>
+          <div class="text-small vp-muted">No booking decision needed now. This recommendation remains available in your trip.</div>
+          <div class="vp-actions"><button class="btn btn-primary" type="button" id="vp-export"><i data-lucide="download" aria-hidden="true"></i> Day GPX</button><button class="btn" type="button" id="vp-share-btn"><i data-lucide="share-2" aria-hidden="true"></i> Share</button></div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="vp-screen" data-panel="share" hidden>
+      <div class="vp-share">
+        <div><span class="viz-badge">Shared itinerary</span><h2>Vienna to Budapest along the Danube</h2><p class="vp-muted">Four flexible days · 284 km · bike paths first</p></div>
+        <div class="vp-share-map">
+          <svg viewBox="0 0 720 270" role="img" aria-label="Overview of the four-day Vienna to Budapest cycling route">
+            <path class="vp-river" d="M-30 169 C130 99 184 223 333 149 S532 106 752 162"/>
+            <path class="vp-route-line" d="M48 153 C138 112 195 188 283 151 C379 111 423 164 505 137 C581 111 621 135 676 103"/>
+            <circle cx="48" cy="153" r="7" fill="var(--foreground)"/><circle cx="283" cy="151" r="7" fill="var(--viz-series-3)"/><circle cx="423" cy="164" r="7" fill="var(--viz-series-3)"/><circle cx="505" cy="137" r="7" fill="var(--viz-series-3)"/><circle cx="676" cy="103" r="7" fill="var(--foreground)"/>
+            <text class="vp-town" x="33" y="132">Vienna</text><text class="vp-town" x="246" y="180">Bratislava</text><text class="vp-town" x="405" y="190">Győr</text><text class="vp-town" x="484" y="112">Esztergom</text><text class="vp-town" x="630" y="82">Budapest</text>
+          </svg>
+        </div>
+        <div class="table-responsive">
+          <table class="table">
+            <thead><tr><th>Day</th><th>Stage</th><th class="text-end">Distance</th><th class="text-end">Ascent</th></tr></thead>
+            <tbody><tr><td>1</td><td>Vienna → Bratislava</td><td class="text-end">68 km</td><td class="text-end">240 m</td></tr><tr><td>2</td><td>Bratislava → Győr</td><td class="text-end">82 km</td><td class="text-end">310 m</td></tr><tr><td>3</td><td>Győr → Esztergom</td><td class="text-end">71 km</td><td class="text-end">460 m</td></tr><tr><td>4</td><td>Esztergom → Budapest</td><td class="text-end">63 km</td><td class="text-end">450 m</td></tr></tbody>
+          </table>
+        </div>
+        <div class="vp-actions"><button class="btn btn-primary" type="button" data-open-itinerary>Explore recommendations</button><button class="btn" type="button" id="vp-copy-link"><i data-lucide="link" aria-hidden="true"></i> Copy trip link</button></div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.getElementById("veloplan-demo");
+      if (!root) return;
+
+      var days = [
+        { title: "Vienna → Bratislava", summary: "68 km · 240 m ascent · 4h 10m riding", towns: ["Vienna", "Bratislava"], route: "M48 225 C121 175 170 252 244 218 C319 183 349 243 419 208 C493 171 532 205 590 166", points: [
+          { x: 302, y: 204, kind: "Lunch", color: 3, name: "Gasthaus zum Goldenen Anker", distance: "Near the midpoint · 35 km", rating: "4.7", reviews: "(842)", tags: ["Austrian", "Bike parking"], copy: "A riverside lunch stop with a shaded terrace and quick regional dishes.", phone: "+43 1 555 0142" },
+          { x: 560, y: 178, kind: "Stay", color: 4, name: "Danube Courtyard Guesthouse", distance: "1.1 km from the route · Bratislava", rating: "4.8", reviews: "(316)", tags: ["Guest house", "Secure bike room"], copy: "A small old-town stay that welcomes touring cyclists. No advance selection required.", phone: "+421 2 555 0198" },
+          { x: 206, y: 196, kind: "See", color: 5, name: "Devin Castle overlook", distance: "Short detour · 24 km", rating: "4.7", reviews: "(9,214)", tags: ["Historic", "River view"], copy: "A dramatic castle ruin above the meeting of the Danube and Morava rivers.", phone: "+421 2 555 0111" }
+        ]},
+        { title: "Bratislava → Győr", summary: "82 km · 310 m ascent · 5h 05m riding", towns: ["Bratislava", "Győr"], route: "M48 176 C122 208 168 151 240 188 C326 232 370 183 430 202 C497 224 545 180 590 194", points: [
+          { x: 326, y: 215, kind: "Lunch", color: 3, name: "Szigetköz Kitchen", distance: "Near the midpoint · 43 km", rating: "4.6", reviews: "(527)", tags: ["Hungarian", "Terrace"], copy: "Seasonal cooking near the wetlands, with plenty of space for loaded bicycles.", phone: "+36 96 555 017" },
+          { x: 563, y: 187, kind: "Stay", color: 4, name: "Baross Garden Rooms", distance: "800 m from the route · Győr", rating: "4.8", reviews: "(404)", tags: ["Guest house", "Laundry"], copy: "Quiet garden rooms within walking distance of the historic centre.", phone: "+36 96 555 021" },
+          { x: 187, y: 163, kind: "See", color: 5, name: "Szigetköz wetlands", distance: "On the route · 22 km", rating: "4.7", reviews: "(1,083)", tags: ["Nature", "Birdlife"], copy: "Braided river channels and shaded floodplain forest along the Danube.", phone: "+36 96 555 008" }
+        ]},
+        { title: "Győr → Esztergom", summary: "71 km · 460 m ascent · 4h 45m riding", towns: ["Győr", "Esztergom"], route: "M48 237 C127 189 181 230 246 196 C321 158 365 239 431 188 C490 141 538 178 590 151", points: [
+          { x: 310, y: 181, kind: "Lunch", color: 3, name: "Old Mill Café", distance: "Near the midpoint · 36 km", rating: "4.5", reviews: "(613)", tags: ["Café", "Vegetarian options"], copy: "A restored mill serving simple lunches and excellent pastries.", phone: "+36 33 555 026" },
+          { x: 567, y: 162, kind: "Stay", color: 4, name: "Basilica View Hostel", distance: "600 m from the route · Esztergom", rating: "4.6", reviews: "(289)", tags: ["Hostel", "Bike storage"], copy: "Simple rooms with a communal kitchen below the basilica.", phone: "+36 33 555 031" },
+          { x: 510, y: 144, kind: "See", color: 5, name: "Esztergom Basilica", distance: "On arrival · 69 km", rating: "4.8", reviews: "(18,631)", tags: ["Historic", "Panorama"], copy: "Hungary’s largest church, set high above the Danube bend.", phone: "+36 33 555 012" }
+        ]},
+        { title: "Esztergom → Budapest", summary: "63 km · 450 m ascent · 4h 20m riding", towns: ["Esztergom", "Budapest"], route: "M48 171 C115 148 177 195 242 163 C313 128 359 211 427 166 C497 119 548 155 590 129", points: [
+          { x: 321, y: 151, kind: "Lunch", color: 3, name: "Danube Bend Pantry", distance: "Near the midpoint · 31 km", rating: "4.7", reviews: "(755)", tags: ["Hungarian", "Local produce"], copy: "A cheerful stop for soups, sandwiches, and homemade lemonade.", phone: "+36 26 555 018" },
+          { x: 568, y: 141, kind: "Stay", color: 4, name: "Chain Bridge Cycle Hotel", distance: "1.4 km from the route · Budapest", rating: "4.8", reviews: "(1,126)", tags: ["Hotel", "Workshop stand"], copy: "Central lodging with secure bicycle storage and a repair corner.", phone: "+36 1 555 0432" },
+          { x: 207, y: 177, kind: "See", color: 5, name: "Visegrád Citadel", distance: "Scenic detour · 21 km", rating: "4.7", reviews: "(12,408)", tags: ["Historic", "Hilltop view"], copy: "A worthwhile climb for sweeping views across the Danube Bend.", phone: "+36 26 555 015" }
+        ]}
+      ];
+
+      var currentDay = 0;
+      var currentPoint = 0;
+      var tabs = root.querySelectorAll("[data-screen]");
+      var panels = root.querySelectorAll("[data-panel]");
+      var dayList = root.querySelector("#vp-days");
+      var poiLayer = root.querySelector("#vp-poi-layer");
+      var rider = root.querySelector("#vp-rider");
+      var routePath = root.querySelector("#vp-map-route");
+      var toastTimer;
+
+      function showScreen(name) {
+        tabs.forEach(function (tab) {
+          var on = tab.getAttribute("data-screen") === name;
+          tab.setAttribute("aria-pressed", String(on));
+          tab.classList.toggle("btn-primary", on);
+        });
+        panels.forEach(function (panel) { panel.hidden = panel.getAttribute("data-panel") !== name; });
+      }
+
+      function toast(message) {
+        var el = root.querySelector("#vp-toast");
+        el.textContent = message;
+        el.classList.add("is-visible");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { el.classList.remove("is-visible"); }, 2200);
+      }
+
+      function renderDays() {
+        dayList.innerHTML = "";
+        days.forEach(function (day, index) {
+          var button = document.createElement("button");
+          button.type = "button";
+          button.className = "btn vp-day" + (index === currentDay ? " btn-primary" : "");
+          button.setAttribute("aria-pressed", String(index === currentDay));
+          button.innerHTML = "<span>Day " + (index + 1) + "</span><small>" + day.summary.split(" · ")[0] + " · " + day.title.split(" → ")[1] + "</small>";
+          button.addEventListener("click", function () { currentDay = index; currentPoint = 0; renderDay(); });
+          dayList.appendChild(button);
+        });
+      }
+
+      function renderPoiDetails() {
+        var point = days[currentDay].points[currentPoint];
+        root.querySelector("#vp-kind").textContent = point.kind;
+        root.querySelector("#vp-poi-name").textContent = point.name;
+        root.querySelector("#vp-poi-distance").textContent = point.distance;
+        root.querySelector("#vp-rating").textContent = point.rating;
+        root.querySelector("#vp-review-count").textContent = point.reviews;
+        root.querySelector("#vp-poi-copy").textContent = point.copy;
+        root.querySelector("#vp-phone").textContent = point.phone;
+        root.querySelector("#vp-phone").href = "tel:" + point.phone.replace(/[^+\d]/g, "");
+        root.querySelector("#vp-tags").innerHTML = point.tags.map(function (tag) { return "<span class=\"viz-badge\">" + tag + "</span>"; }).join("");
+      }
+
+      function renderPoints() {
+        poiLayer.innerHTML = "";
+        days[currentDay].points.forEach(function (point, index) {
+          var group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+          group.setAttribute("class", "vp-poi");
+          group.setAttribute("role", "button");
+          group.setAttribute("tabindex", "0");
+          group.setAttribute("aria-label", point.kind + ": " + point.name);
+          group.innerHTML = "<circle cx=\"" + point.x + "\" cy=\"" + point.y + "\" r=\"10\" fill=\"var(--viz-series-" + point.color + ")\"></circle><circle cx=\"" + point.x + "\" cy=\"" + point.y + "\" r=\"3\" fill=\"var(--background)\"></circle><text x=\"" + (point.x + 15) + "\" y=\"" + (point.y + 4) + "\">" + point.kind + "</text>";
+          function select() { currentPoint = index; renderPoiDetails(); }
+          group.addEventListener("click", select);
+          group.addEventListener("keydown", function (event) { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(); } });
+          poiLayer.appendChild(group);
+        });
+      }
+
+      function renderDay() {
+        var day = days[currentDay];
+        root.querySelector("#vp-day-title").textContent = day.title;
+        root.querySelector("#vp-day-summary").textContent = day.summary;
+        routePath.setAttribute("d", day.route);
+        renderDays();
+        renderPoints();
+        renderPoiDetails();
+        rider.setAttribute("opacity", "0");
+      }
+
+      tabs.forEach(function (tab) { tab.addEventListener("click", function () { showScreen(tab.getAttribute("data-screen")); }); });
+      root.querySelectorAll("[data-open-itinerary]").forEach(function (button) { button.addEventListener("click", function () { showScreen("itinerary"); }); });
+
+      var minRange = root.querySelector("#vp-min");
+      var maxRange = root.querySelector("#vp-max");
+      function syncRanges(changed) {
+        var min = Number(minRange.value);
+        var max = Number(maxRange.value);
+        if (min > max - 5) {
+          if (changed === "min") maxRange.value = String(min + 5);
+          else minRange.value = String(max - 5);
+        }
+        root.querySelector("#vp-min-value").textContent = minRange.value + " km";
+        root.querySelector("#vp-max-value").textContent = maxRange.value + " km";
+        var avg = (Number(minRange.value) + Number(maxRange.value)) / 2;
+        root.querySelector("#vp-preview-title").textContent = avg < 55 ? "5 gentle days" : avg > 82 ? "3 ambitious days" : "4 relaxed days";
+      }
+      minRange.addEventListener("input", function () { syncRanges("min"); });
+      maxRange.addEventListener("input", function () { syncRanges("max"); });
+      root.querySelectorAll("input[name=surface]").forEach(function (radio) { radio.addEventListener("change", function () {
+        var copy = radio.value === "paths" ? "Mostly traffic-free Danube paths" : radio.value === "gravel" ? "Quiet paths with scenic gravel sections" : "Fast routing using quiet roads too";
+        root.querySelector("#vp-preview-copy").textContent = copy;
+      }); });
+
+      root.querySelector("#vp-plan-form").addEventListener("submit", function (event) { event.preventDefault(); showScreen("itinerary"); toast("Your four-day route is ready"); });
+
+      var hit = root.querySelector("#vp-profile-hit");
+      var marker = root.querySelector("#vp-profile-marker");
+      var dot = root.querySelector("#vp-profile-dot");
+      function profileMove(event) {
+        var rect = hit.getBoundingClientRect();
+        var ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+        var x = 42 + ratio * 582;
+        var wave = 90 - 19 * Math.sin(ratio * Math.PI * 5) - ratio * 20;
+        marker.setAttribute("x1", x.toFixed(1)); marker.setAttribute("x2", x.toFixed(1));
+        dot.setAttribute("cx", x.toFixed(1)); dot.setAttribute("cy", wave.toFixed(1));
+        var length = routePath.getTotalLength();
+        var p = routePath.getPointAtLength(length * ratio);
+        rider.setAttribute("cx", p.x.toFixed(1)); rider.setAttribute("cy", p.y.toFixed(1)); rider.setAttribute("opacity", "1");
+        var distance = Math.round(Number(days[currentDay].summary.split(" ")[0]) * ratio);
+        var elevation = Math.round(126 + (128 - wave) * 1.3);
+        root.querySelector("#vp-profile-readout").textContent = distance + " km · " + elevation + " m elevation — matching position shown on the map";
+      }
+      hit.addEventListener("pointermove", profileMove);
+      hit.addEventListener("pointerleave", function () { rider.setAttribute("opacity", "0"); root.querySelector("#vp-profile-readout").textContent = "Move across the elevation profile to follow the route on the map."; });
+
+      function buildGpx() {
+        var day = days[currentDay];
+        var points = day.points.map(function (point, index) { return "  <wpt lat=\"48." + (1200 + index * 210) + "\" lon=\"16." + (3600 + index * 340) + "\"><name>" + point.name + "</name><link href=\"https://veloplan.example/trip/danube/day-" + (currentDay + 1) + "/poi-" + (index + 1) + "\"/></wpt>"; }).join("\n");
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gpx version=\"1.1\" creator=\"VeloPlan Europe\">\n" + points + "\n  <trk><name>Day " + (currentDay + 1) + ": " + day.title + "</name><trkseg><trkpt lat=\"48.2082\" lon=\"16.3738\"/><trkpt lat=\"48.1486\" lon=\"17.1077\"/></trkseg></trk>\n</gpx>";
+      }
+      root.querySelector("#vp-export").addEventListener("click", function () {
+        var blob = new Blob([buildGpx()], { type: "application/gpx+xml" });
+        var link = document.createElement("a");
+        link.href = URL.createObjectURL(blob); link.download = "veloplan-day-" + (currentDay + 1) + ".gpx"; link.click();
+        setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+        toast("Day " + (currentDay + 1) + " GPX downloaded with named POIs");
+      });
+      root.querySelector("#vp-share-btn").addEventListener("click", function () { showScreen("share"); });
+      root.querySelector("#vp-copy-link").addEventListener("click", function () {
+        if (navigator.clipboard) navigator.clipboard.writeText("https://veloplan.example/trip/danube-four-days");
+        showScreen("itinerary"); toast("Trip link copied");
+      });
+
+      renderDay();
+      if (window.lucide) window.lucide.createIcons({ attrs: { width: 16, height: 16 } });
+    })();
+  </script>
+</div>
+
+<script id="codex-visualization-floating-ui-core" src="https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js"></script>
+<script id="codex-visualization-floating-ui-dom" src="https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js"></script>
+<script id="codex-visualization-lucide" async src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js"></script>
+<script id="codex-visualization-tooltip">/* oxlint-disable typescript/no-unsafe-argument, typescript/no-unsafe-call, typescript/no-unsafe-return */
+// Runs inside the visualization sandbox, not the host webview.
+(() => {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set(["top", "right", "bottom", "left"]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+
+  const getTrigger = (target) =>
+    target?.nodeType === Node.ELEMENT_NODE
+      ? target.closest("[data-tooltip]")
+      : null;
+  const containsTarget = (trigger, target) =>
+    target?.nodeType != null && trigger.contains(target);
+  const getContent = (trigger) =>
+    trigger.getAttribute("data-tooltip")?.trim() ?? "";
+  const getPlacement = (trigger) => {
+    const placement = trigger.getAttribute("data-tooltip-placement");
+    return tooltipPlacements.has(placement) ? placement : "top";
+  };
+  const getTooltip = () => {
+    if (tooltip == null) {
+      tooltip = document.createElement("div");
+      tooltip.id = tooltipId;
+      tooltip.className = "tooltip";
+      tooltip.setAttribute("role", "tooltip");
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) => {
+    const ids = new Set(
+      (trigger.getAttribute("aria-describedby") ?? "")
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute("aria-describedby");
+    } else {
+      trigger.setAttribute("aria-describedby", [...ids].join(" "));
+    }
+  };
+  const clearOpenTimeout = () => {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) => {
+    clearOpenTimeout();
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) => {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              "--tooltip-available-width",
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              "--tooltip-available-height",
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: "fixed",
+    })
+      .then(({ x, y }) => {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = "visible";
+      })
+      .catch(() => {
+        if (activeTrigger === trigger && request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) => {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = "hidden";
+    floating.style.transform = "translate(0, 0)";
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () => {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) => {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() < skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() => {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) => {
+    if (event.pointerType === "touch") {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handleLeave = (event) => {
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) => {
+    const trigger = getTrigger(event.target);
+    if (trigger?.matches(":focus-visible")) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) => {
+    if (event.key === "Escape") {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) => {
+    const trigger = getTrigger(event.target);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const destroy = () => {
+    closeTooltip(false);
+    document.removeEventListener("pointerover", handlePointerOpen);
+    document.removeEventListener("pointerout", handleLeave);
+    document.removeEventListener("focusin", handleFocusIn);
+    document.removeEventListener("focusout", handleLeave);
+    document.removeEventListener("keydown", handleKeyDown);
+    document.removeEventListener("contextmenu", handleContextMenu);
+    tooltip = null;
+  };
+
+  document.addEventListener("pointerover", handlePointerOpen);
+  document.addEventListener("pointerout", handleLeave);
+  document.addEventListener("focusin", handleFocusIn);
+  document.addEventListener("focusout", handleLeave);
+  document.addEventListener("keydown", handleKeyDown);
+  document.addEventListener("contextmenu", handleContextMenu);
+  window.addEventListener("pagehide", destroy, { once: true });
+})();
+</script>
+<script id="codex-visualization-lucide-initialization">(() => {
+  const initialize = () => {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById("codex-visualization-lucide")
+    ?.addEventListener("load", initialize, { once: true });
+})();
+</script>
+</body>
+</html>
