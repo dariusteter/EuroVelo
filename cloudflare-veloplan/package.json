@@ -1,0 +1,14 @@
+{
+  "name": "veloplan-europe",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "check": "node --check worker/index.js && node scripts/check-client.mjs && node scripts/test-worker.mjs && wrangler deploy --dry-run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.120.0"
+  }
+}

@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Plan flexible multi-day bicycle trips across Europe.">
+  <title>VeloPlan Europe</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18201b;
+      --muted: #657068;
+      --paper: #f5f3ec;
+      --panel: #fffef9;
+      --line: #d9ddd7;
+      --brand: #174f3d;
+      --brand-soft: #e2eee8;
+      --lunch: #d66a2c;
+      --lodging: #466cc7;
+      --attraction: #8a5cac;
+      --shadow: 0 16px 40px rgba(24, 32, 27, .08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button, input, select { font: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid rgba(23, 79, 61, .28); outline-offset: 2px; }
+    a { color: var(--brand); }
+    .app { min-height: 100vh; }
+    .topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px clamp(16px, 3vw, 38px); background: rgba(245, 243, 236, .94); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 750; letter-spacing: -.02em; }
+    .brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--brand); color: white; font-size: 20px; }
+    .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .button { appearance: none; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 10px 15px; font-weight: 700; cursor: pointer; transition: transform .15s ease, background .15s ease; }
+    .button:hover { transform: translateY(-1px); }
+    .button.primary { background: var(--brand); color: white; border-color: var(--brand); }
+    .button.ghost { background: transparent; }
+    .main { max-width: 1500px; margin: 0 auto; padding: 24px clamp(14px, 2.5vw, 34px) 44px; }
+    .trip-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 18px; margin-bottom: 18px; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 7px; font-size: clamp(26px, 4vw, 44px); line-height: 1.04; letter-spacing: -.045em; }
+    h2 { margin-bottom: 4px; font-size: clamp(20px, 2.3vw, 28px); letter-spacing: -.025em; }
+    h3 { margin-bottom: 4px; font-size: 16px; }
+    .subtle { color: var(--muted); }
+    .status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-size: 13px; font-weight: 750; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); }
+    .planner { display: grid; grid-template-columns: 240px minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .setup-panel { padding: 16px; display: grid; gap: 17px; }
+    .field { display: grid; gap: 7px; }
+    .field label, legend { font-weight: 750; font-size: 13px; }
+    select, input[type="range"] { width: 100%; }
+    select { border: 1px solid var(--line); border-radius: 11px; padding: 10px; color: var(--ink); background: white; }
+    fieldset { margin: 0; padding: 0; border: 0; }
+    legend { margin-bottom: 8px; }
+    .checks { display: grid; gap: 7px; }
+    .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .range-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+    .range-head strong { color: var(--brand); }
+    .day-list { display: grid; gap: 7px; }
+    .day-button { width: 100%; text-align: left; border: 1px solid transparent; border-radius: 13px; padding: 10px; background: transparent; color: var(--ink); cursor: pointer; }
+    .day-button:hover { background: var(--paper); }
+    .day-button.active { background: var(--brand); color: white; }
+    .day-button span { display: block; font-weight: 750; }
+    .day-button small { display: block; opacity: .72; margin-top: 2px; }
+    .map-column { min-width: 0; display: grid; gap: 13px; }
+    .map-card { overflow: hidden; position: relative; min-height: 540px; }
+    #map { height: 540px; width: 100%; background: #dce8df; }
+    .map-fallback { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; padding: 28px; background: radial-gradient(circle at 70% 30%, rgba(23,79,61,.13), transparent 34%), linear-gradient(135deg, #edf2e9, #e3ebe8); }
+    .map-fallback[hidden] { display: none; }
+    .fallback-box { max-width: 360px; text-align: center; background: rgba(255,255,255,.88); border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); }
+    .map-legend { position: absolute; z-index: 3; left: 12px; bottom: 12px; display: flex; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 999px; background: rgba(255,255,255,.92); box-shadow: 0 4px 18px rgba(24,32,27,.12); font-size: 12px; font-weight: 700; }
+    .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .legend-dot.lunch { background: var(--lunch); }
+    .legend-dot.lodging { background: var(--lodging); }
+    .legend-dot.route { background: var(--brand); }
+    .map-pin { width: 28px; height: 28px; border: 3px solid white; border-radius: 50% 50% 50% 8px; transform: rotate(-45deg); display: grid; place-items: center; box-shadow: 0 3px 10px rgba(24,32,27,.24); color: white; }
+    .map-pin span { transform: rotate(45deg); font-size: 12px; font-weight: 850; }
+    .map-pin.lunch { background: var(--lunch); }
+    .map-pin.lodging { background: var(--lodging); }
+    .map-pin.position { width: 22px; height: 22px; border-radius: 50%; background: var(--brand); transform: none; opacity: 0; }
+    .map-pin.position.visible { opacity: 1; }
+    .elevation { padding: 14px 16px 10px; }
+    .elevation-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: 4px; }
+    .elevation-head strong { font-size: 14px; }
+    #elevationSvg { width: 100%; height: 165px; display: block; touch-action: none; }
+    .grid-line { stroke: var(--line); stroke-width: 1; }
+    .profile-area { fill: rgba(23,79,61,.14); }
+    .profile-line { fill: none; stroke: var(--brand); stroke-width: 3; }
+    .profile-marker { stroke: var(--ink); stroke-width: 1.5; opacity: 0; }
+    .profile-dot { fill: var(--ink); opacity: 0; }
+    .axis-label { fill: var(--muted); font-size: 11px; }
+    .recommendations { padding: 15px; display: grid; gap: 16px; max-height: calc(100vh - 112px); overflow: auto; }
+    .recommendation-section { display: grid; gap: 8px; }
+    .section-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .section-title h3 { margin: 0; }
+    .count { color: var(--muted); font-size: 12px; }
+    .choice-list { display: grid; gap: 7px; }
+    .choice { width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 13px; background: white; color: var(--ink); padding: 11px; cursor: pointer; }
+    .choice:hover { border-color: #aeb8b1; }
+    .choice.selected { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(23,79,61,.12); }
+    .choice-top { display: flex; justify-content: space-between; gap: 9px; align-items: flex-start; }
+    .choice-name { font-weight: 760; line-height: 1.25; }
+    .choice-rating { white-space: nowrap; font-size: 12px; font-weight: 750; }
+    .choice-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; color: var(--muted); font-size: 12px; }
+    .source-badge { display: inline-block; padding: 2px 6px; border-radius: 999px; background: var(--paper); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+    .details { border-top: 1px solid var(--line); padding-top: 14px; }
+    .details p { margin: 8px 0; font-size: 13px; color: var(--muted); }
+    .details-links { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; font-weight: 700; }
+    .loading-row { padding: 13px; border-radius: 12px; background: var(--paper); color: var(--muted); font-size: 13px; }
+    .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: min(360px, calc(100vw - 36px)); padding: 12px 14px; border-radius: 12px; background: var(--ink); color: white; box-shadow: var(--shadow); transform: translateY(18px); opacity: 0; pointer-events: none; transition: .2s ease; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    @media (max-width: 1120px) {
+      .planner { grid-template-columns: 210px minmax(0, 1fr); }
+      .recommendations { grid-column: 1 / -1; max-height: none; grid-template-columns: 1fr 1fr; }
+      .details { grid-column: 1 / -1; }
+    }
+    @media (max-width: 760px) {
+      .topbar, .trip-header { align-items: flex-start; }
+      .trip-header, .planner { grid-template-columns: 1fr; }
+      .setup-panel { order: 2; }
+      .day-list { grid-template-columns: repeat(4, minmax(135px, 1fr)); overflow-x: auto; }
+      .map-card, #map { min-height: 430px; height: 430px; }
+      .recommendations { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) {
+      .topbar { position: static; }
+      .top-actions .button.ghost { display: none; }
+      .main { padding-top: 18px; }
+      .map-card, #map { min-height: 370px; height: 370px; }
+      .map-legend { border-radius: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">↟</span><span>VeloPlan Europe</span></div>
+      <div class="top-actions">
+        <button class="button ghost" type="button" id="shareButton">Share trip</button>
+        <button class="button primary" type="button" id="gpxButton">Download route GPX</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="trip-header">
+        <div>
+          <h1>Vienna to Budapest, at touring pace.</h1>
+          <p class="subtle">Four flexible days along the Danube · 284 km · bike paths first</p>
+        </div>
+        <div class="status-pill"><span class="status-dot"></span><span id="liveStatus">Loading map service…</span></div>
+      </section>
+
+      <div class="planner">
+        <aside class="panel setup-panel" aria-label="Trip preferences">
+          <div class="field">
+            <label for="startCity">Start</label>
+            <select id="startCity"><option>Vienna, Austria</option><option>Vienna, France</option><option>Vienna, Italy</option></select>
+          </div>
+          <div class="field">
+            <label for="endCity">Destination</label>
+            <select id="endCity"><option>Budapest, Hungary</option><option>Budapest, Georgia</option></select>
+          </div>
+          <div class="field">
+            <div class="range-head"><span>Daily distance</span><strong id="distanceValue">45–75 km</strong></div>
+            <label class="sr-only" for="distanceRange">Maximum daily distance</label>
+            <input id="distanceRange" type="range" min="55" max="100" step="5" value="75">
+          </div>
+          <fieldset>
+            <legend>Surface</legend>
+            <div class="checks">
+              <label class="check"><input type="radio" name="surface" checked> Bike paths first</label>
+              <label class="check"><input type="radio" name="surface"> Gravel welcome</label>
+              <label class="check"><input type="radio" name="surface"> Quiet roads are OK</label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Lodging</legend>
+            <div class="checks">
+              <label class="check"><input type="checkbox" checked> Camping</label>
+              <label class="check"><input type="checkbox" checked> Hostel</label>
+              <label class="check"><input type="checkbox" checked> Guest house</label>
+              <label class="check"><input type="checkbox"> Hotel</label>
+            </div>
+          </fieldset>
+          <div>
+            <h3>Your four days</h3>
+            <div class="day-list" id="dayList"></div>
+          </div>
+          <button class="button primary" type="button" id="regenerateButton">Regenerate trip</button>
+        </aside>
+
+        <section class="map-column">
+          <div>
+            <h2 id="dayTitle">Vienna → Bratislava</h2>
+            <p class="subtle" id="daySummary">68 km · 240 m ascent · about 4h 10m riding</p>
+          </div>
+          <div class="panel map-card">
+            <div id="map" aria-label="Interactive map showing the daily bicycle route and recommendations"></div>
+            <div class="map-fallback" id="mapFallback">
+              <div class="fallback-box"><h3>Detailed map ready to connect</h3><p class="subtle" id="mapFallbackCopy">Add the browser-restricted Maps key in Cloudflare and the live pan-and-zoom map will appear here.</p></div>
+            </div>
+            <div class="map-legend" aria-label="Map legend">
+              <span class="legend-item"><span class="legend-dot route"></span>Route</span>
+              <span class="legend-item"><span class="legend-dot lunch"></span>Lunch</span>
+              <span class="legend-item"><span class="legend-dot lodging"></span>Stay</span>
+            </div>
+          </div>
+          <div class="panel elevation">
+            <div class="elevation-head"><strong>Elevation profile</strong><span class="subtle" id="profileReadout">Move across the profile to locate yourself on the map.</span></div>
+            <svg id="elevationSvg" viewBox="0 0 700 165" role="img" aria-label="Interactive elevation profile"></svg>
+          </div>
+        </section>
+
+        <aside class="panel recommendations" aria-label="Daily recommendations">
+          <section class="recommendation-section">
+            <div class="section-title"><h3>Lunch choices</h3><span class="count">3 around midpoint</span></div>
+            <div class="choice-list" id="lunchChoices"><div class="loading-row">Finding three good options…</div></div>
+          </section>
+          <section class="recommendation-section">
+            <div class="section-title"><h3>Lodging choices</h3><span class="count">3 near arrival</span></div>
+            <div class="choice-list" id="lodgingChoices"><div class="loading-row">Finding three good options…</div></div>
+          </section>
+          <section class="details" id="details" aria-live="polite">
+            <span class="source-badge" id="detailSource">Demo</span>
+            <h3 id="detailName">Select any recommendation</h3>
+            <p id="detailAddress">You do not need to book or choose anything yet.</p>
+            <div class="details-links" id="detailLinks"></div>
+          </section>
+        </aside>
+      </div>
+    </main>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script>
+    const tripDays = [
+      {
+        title: "Vienna → Bratislava", distance: 68, ascent: 240, rideTime: "4h 10m",
+        route: [[48.2082,16.3738],[48.1450,16.4790],[48.0730,16.7040],[48.1170,16.8650],[48.1486,17.1077]],
+        lunchPoint: [48.0730,16.7040], lodgingPoint: [48.1486,17.1077],
+        profile: [171,164,158,172,149,156,143,152,136,141,129,138],
+        lunch: [
+          ["Danube Terrace",4.7,842,"Austrian · riverside terrace"],
+          ["Cyclist’s Pantry",4.6,391,"Seasonal lunch · bike parking"],
+          ["Hainburg Market Kitchen",4.5,627,"Quick regional dishes · courtyard"]
+        ],
+        lodging: [
+          ["Danube Courtyard Guesthouse",4.8,316,"Guest house · secure bike room"],
+          ["Old Town Cycle Hostel",4.6,908,"Hostel · laundry and tools"],
+          ["Riverside Camp Bratislava",4.4,512,"Camping · late arrival friendly"]
+        ]
+      },
+      {
+        title: "Bratislava → Győr", distance: 82, ascent: 310, rideTime: "5h 05m",
+        route: [[48.1486,17.1077],[48.0100,17.2520],[47.8730,17.2760],[47.7640,17.4630],[47.6875,17.6504]],
+        lunchPoint: [47.8730,17.2760], lodgingPoint: [47.6875,17.6504],
+        profile: [137,133,142,128,136,121,127,118,132,124,117,128],
+        lunch: [
+          ["Szigetköz Kitchen",4.6,527,"Hungarian · shaded terrace"],
+          ["Wetlands Café",4.7,244,"Soups and sandwiches · quick service"],
+          ["Moson Picnic House",4.5,603,"Local produce · vegetarian options"]
+        ],
+        lodging: [
+          ["Baross Garden Rooms",4.8,404,"Guest house · laundry"],
+          ["Győr Bike Hostel",4.6,377,"Hostel · locked bike room"],
+          ["Rába Riverside Camping",4.4,296,"Camping · kitchen and showers"]
+        ]
+      },
+      {
+        title: "Győr → Esztergom", distance: 71, ascent: 460, rideTime: "4h 45m",
+        route: [[47.6875,17.6504],[47.7430,18.1210],[47.7580,18.1490],[47.7420,18.2440],[47.7856,18.7403]],
+        lunchPoint: [47.7580,18.1490], lodgingPoint: [47.7856,18.7403],
+        profile: [112,119,133,126,151,138,169,144,181,157,194,168],
+        lunch: [
+          ["Old Mill Café",4.5,613,"Café · vegetarian options"],
+          ["Komárom Table",4.7,488,"Hungarian · garden seating"],
+          ["Fort Lunch Room",4.4,358,"Fast plates · near the route"]
+        ],
+        lodging: [
+          ["Basilica View Hostel",4.6,289,"Hostel · bicycle storage"],
+          ["Danube Bend Guest Rooms",4.8,416,"Guest house · breakfast"],
+          ["Esztergom Island Camp",4.5,532,"Camping · riverside pitches"]
+        ]
+      },
+      {
+        title: "Esztergom → Budapest", distance: 63, ascent: 450, rideTime: "4h 20m",
+        route: [[47.7856,18.7403],[47.7980,18.9740],[47.6690,19.0750],[47.6160,19.0430],[47.4979,19.0402]],
+        lunchPoint: [47.6690,19.0750], lodgingPoint: [47.4979,19.0402],
+        profile: [108,126,159,142,188,151,174,139,162,126,148,120],
+        lunch: [
+          ["Danube Bend Pantry",4.7,755,"Hungarian · local produce"],
+          ["Szentendre Courtyard",4.6,1024,"Mediterranean · shaded tables"],
+          ["Rider’s Lunch Counter",4.5,437,"Fast lunch · refill station"]
+        ],
+        lodging: [
+          ["Chain Bridge Cycle Hotel",4.8,1126,"Hotel · workshop stand"],
+          ["Buda Backpacker Rooms",4.6,884,"Hostel · secure storage"],
+          ["Danube Garden Guesthouse",4.7,561,"Guest house · quiet courtyard"]
+        ]
+      }
+    ];
+
+    const state = {
+      dayIndex: 0,
+      map: null,
+      mapsReady: false,
+      livePlaces: false,
+      routeLine: null,
+      markers: [],
+      positionMarker: null,
+      positionNode: null,
+      recommendations: new Map(),
+      selected: null
+    };
+
+    const elements = {
+      dayList: document.getElementById("dayList"),
+      dayTitle: document.getElementById("dayTitle"),
+      daySummary: document.getElementById("daySummary"),
+      lunchChoices: document.getElementById("lunchChoices"),
+      lodgingChoices: document.getElementById("lodgingChoices"),
+      liveStatus: document.getElementById("liveStatus"),
+      mapFallback: document.getElementById("mapFallback"),
+      mapFallbackCopy: document.getElementById("mapFallbackCopy"),
+      detailSource: document.getElementById("detailSource"),
+      detailName: document.getElementById("detailName"),
+      detailAddress: document.getElementById("detailAddress"),
+      detailLinks: document.getElementById("detailLinks"),
+      elevationSvg: document.getElementById("elevationSvg"),
+      profileReadout: document.getElementById("profileReadout"),
+      toast: document.getElementById("toast")
+    };
+
+    function fallbackRecommendations(day) {
+      function convert(item, index, kind, anchor) {
+        const offset = (index - 1) * 0.014;
+        return {
+          id: `demo-${state.dayIndex}-${kind}-${index}`,
+          name: item[0], rating: item[1], userRatingCount: item[2],
+          type: item[3].split(" · ")[0], note: item[3],
+          address: kind === "lunch" ? "Near the daily midpoint" : "Near today’s arrival",
+          latitude: anchor[0] + offset,
+          longitude: anchor[1] - offset * .7,
+          websiteUri: "", phone: "", googleMapsUri: "", source: "Demo"
+        };
+      }
+      return {
+        lunch: day.lunch.map((item, index) => convert(item, index, "lunch", day.lunchPoint)),
+        lodging: day.lodging.map((item, index) => convert(item, index, "lodging", day.lodgingPoint))
+      };
+    }
+
+    function renderDayButtons() {
+      elements.dayList.innerHTML = "";
+      tripDays.forEach((day, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `day-button${index === state.dayIndex ? " active" : ""}`;
+        button.innerHTML = `<span>Day ${index + 1}</span><small>${day.distance} km · ${escapeHtml(day.title.split(" → ")[1])}</small>`;
+        button.addEventListener("click", () => selectDay(index));
+        elements.dayList.appendChild(button);
+      });
+    }
+
+    async function selectDay(index) {
+      state.dayIndex = index;
+      state.selected = null;
+      renderDayButtons();
+      renderDayHeading();
+      renderElevation();
+      renderFallbackThenLoad();
+      if (state.mapsReady) drawMap();
+    }
+
+    function renderDayHeading() {
+      const day = tripDays[state.dayIndex];
+      elements.dayTitle.textContent = day.title;
+      elements.daySummary.textContent = `${day.distance} km · ${day.ascent} m ascent · about ${day.rideTime} riding`;
+    }
+
+    function renderFallbackThenLoad() {
+      const day = tripDays[state.dayIndex];
+      const existing = state.recommendations.get(state.dayIndex);
+      if (existing) {
+        renderRecommendations(existing);
+        return;
+      }
+      const fallback = fallbackRecommendations(day);
+      renderRecommendations(fallback);
+      if (state.livePlaces) loadLiveRecommendations(state.dayIndex);
+    }
+
+    async function loadLiveRecommendations(dayIndex) {
+      const day = tripDays[dayIndex];
+      elements.liveStatus.textContent = "Finding live Places…";
+      try {
+        const [lunch, lodging] = await Promise.all([
+          fetchPlaces("lunch", day.lunchPoint, 6500),
+          fetchPlaces("lodging", day.lodgingPoint, 5000)
+        ]);
+        if (dayIndex !== state.dayIndex) return;
+        const fallback = fallbackRecommendations(day);
+        const recommendations = {
+          lunch: fillThree(lunch, fallback.lunch),
+          lodging: fillThree(lodging, fallback.lodging)
+        };
+        state.recommendations.set(dayIndex, recommendations);
+        state.selected = null;
+        elements.liveStatus.textContent = "Live Google Places connected";
+        renderRecommendations(recommendations);
+        if (state.mapsReady) drawPoiMarkers(recommendations);
+      } catch (error) {
+        console.warn("Places request failed", error);
+        elements.liveStatus.textContent = "Map live · demo recommendations";
+        toast("The map is live; recommendation cards are using demo data until Places is available.");
+      }
+    }
+
+    async function fetchPlaces(kind, point, radiusMeters) {
+      const response = await fetch("/api/places", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, latitude: point[0], longitude: point[1], radiusMeters })
+      });
+      if (!response.ok) throw new Error(`Places request failed with ${response.status}`);
+      const data = await response.json();
+      return (Array.isArray(data.places) ? data.places : []).map((place) => ({ ...place, source: "Google" }));
+    }
+
+    function fillThree(live, fallback) {
+      const usable = live.filter((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
+      return [...usable, ...fallback].slice(0, 3);
+    }
+
+    function renderRecommendations(recommendations) {
+      renderChoiceList(elements.lunchChoices, recommendations.lunch, "lunch");
+      renderChoiceList(elements.lodgingChoices, recommendations.lodging, "lodging");
+      if (!state.selected) selectRecommendation(recommendations.lunch[0], "lunch", false);
+      if (state.mapsReady) drawPoiMarkers(recommendations);
+    }
+
+    function renderChoiceList(container, choices, kind) {
+      container.innerHTML = "";
+      choices.forEach((choice, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `choice${state.selected?.id === choice.id ? " selected" : ""}`;
+        const reviews = choice.userRatingCount ? `(${formatNumber(choice.userRatingCount)})` : "New";
+        button.innerHTML = `
+          <div class="choice-top"><span class="choice-name">${index + 1}. ${escapeHtml(choice.name)}</span><span class="choice-rating">★ ${Number(choice.rating || 0).toFixed(1)}</span></div>
+          <div class="choice-meta"><span>${escapeHtml(choice.type || choice.note || (kind === "lunch" ? "Restaurant" : "Lodging"))}</span><span>${reviews}</span><span class="source-badge">${escapeHtml(choice.source)}</span></div>`;
+        button.addEventListener("click", () => selectRecommendation(choice, kind, true));
+        container.appendChild(button);
+      });
+    }
+
+    function selectRecommendation(choice, kind, moveMap) {
+      state.selected = { ...choice, kind };
+      const current = state.recommendations.get(state.dayIndex) || fallbackRecommendations(tripDays[state.dayIndex]);
+      renderChoiceList(elements.lunchChoices, current.lunch, "lunch");
+      renderChoiceList(elements.lodgingChoices, current.lodging, "lodging");
+      elements.detailSource.textContent = choice.source;
+      elements.detailName.textContent = choice.name;
+      elements.detailAddress.textContent = choice.address || choice.note || "Details available in the trip.";
+      const links = [];
+      if (choice.websiteUri) links.push(`<a href="${escapeAttribute(choice.websiteUri)}" target="_blank" rel="noreferrer">Website</a>`);
+      if (choice.phone) links.push(`<a href="tel:${escapeAttribute(choice.phone.replace(/[^+\\d]/g, ""))}">${escapeHtml(choice.phone)}</a>`);
+      if (choice.googleMapsUri) links.push(`<a href="${escapeAttribute(choice.googleMapsUri)}" target="_blank" rel="noreferrer">Open in Google Maps</a>`);
+      elements.detailLinks.innerHTML = links.join("") || "<span class=\"subtle\">Live links appear after Google Places is connected.</span>";
+      if (moveMap && state.mapsReady) {
+        state.map.panTo({ lat: choice.latitude, lng: choice.longitude });
+        state.map.setZoom(14);
+      }
+    }
+
+    async function loadGoogleServices() {
+      try {
+        const response = await fetch("/api/config", { cache: "no-store" });
+        const config = await response.json();
+        state.livePlaces = Boolean(config.livePlacesAvailable);
+        if (!config.googleMapsBrowserKey) {
+          elements.liveStatus.textContent = "Demo mode · add map key";
+          return;
+        }
+        await loadGoogleScript(config.googleMapsBrowserKey);
+        initGoogleMap();
+        elements.liveStatus.textContent = state.livePlaces ? "Live Google map and Places" : "Live Google map · demo recommendations";
+        if (state.livePlaces) loadLiveRecommendations(state.dayIndex);
+      } catch (error) {
+        console.warn("Google Maps could not load", error);
+        elements.liveStatus.textContent = "Demo mode · map unavailable";
+        elements.mapFallbackCopy.textContent = "The page is working, but the Google map could not load. Check the browser key and its website restrictions.";
+      }
+    }
+
+    function loadGoogleScript(key) {
+      return new Promise((resolve, reject) => {
+        window.__veloplanGoogleReady = resolve;
+        const script = document.createElement("script");
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&loading=async&v=weekly&libraries=marker,geometry&callback=__veloplanGoogleReady`;
+        script.async = true;
+        script.onerror = () => reject(new Error("Google Maps script failed to load"));
+        document.head.appendChild(script);
+      });
+    }
+
+    function initGoogleMap() {
+      const day = tripDays[state.dayIndex];
+      state.map = new google.maps.Map(document.getElementById("map"), {
+        center: toLatLng(day.route[0]),
+        zoom: 9,
+        mapId: "DEMO_MAP_ID",
+        gestureHandling: "greedy",
+        streetViewControl: false,
+        fullscreenControl: true,
+        mapTypeControl: true
+      });
+      state.mapsReady = true;
+      elements.mapFallback.hidden = true;
+      createPositionMarker();
+      drawMap();
+    }
+
+    function drawMap() {
+      clearMapObjects();
+      const day = tripDays[state.dayIndex];
+      const path = day.route.map(toLatLng);
+      state.routeLine = new google.maps.Polyline({
+        map: state.map,
+        path,
+        geodesic: true,
+        strokeColor: "#174f3d",
+        strokeOpacity: .95,
+        strokeWeight: 6
+      });
+      const bounds = new google.maps.LatLngBounds();
+      path.forEach((point) => bounds.extend(point));
+      state.map.fitBounds(bounds, 55);
+      const recommendations = state.recommendations.get(state.dayIndex) || fallbackRecommendations(day);
+      drawPoiMarkers(recommendations);
+      if (state.positionMarker) state.positionMarker.map = state.map;
+    }
+
+    function clearMapObjects() {
+      if (state.routeLine) state.routeLine.setMap(null);
+      state.markers.forEach((marker) => { marker.map = null; });
+      state.markers = [];
+    }
+
+    function drawPoiMarkers(recommendations) {
+      state.markers.forEach((marker) => { marker.map = null; });
+      state.markers = [];
+      [
+        ...recommendations.lunch.map((place) => ({ place, kind: "lunch" })),
+        ...recommendations.lodging.map((place) => ({ place, kind: "lodging" }))
+      ].forEach(({ place, kind }, index) => {
+        if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
+        const marker = new google.maps.marker.AdvancedMarkerElement({
+          map: state.map,
+          position: { lat: place.latitude, lng: place.longitude },
+          title: place.name,
+          content: markerNode(kind, (index % 3) + 1)
+        });
+        marker.addListener("click", () => selectRecommendation(place, kind, false));
+        state.markers.push(marker);
+      });
+    }
+
+    function markerNode(kind, label) {
+      const node = document.createElement("div");
+      node.className = `map-pin ${kind}`;
+      node.innerHTML = `<span>${label}</span>`;
+      return node;
+    }
+
+    function createPositionMarker() {
+      state.positionNode = document.createElement("div");
+      state.positionNode.className = "map-pin position";
+      state.positionMarker = new google.maps.marker.AdvancedMarkerElement({
+        map: state.map,
+        position: toLatLng(tripDays[state.dayIndex].route[0]),
+        title: "Elevation profile location",
+        content: state.positionNode,
+        zIndex: 999
+      });
+    }
+
+    function renderElevation() {
+      const day = tripDays[state.dayIndex];
+      const values = day.profile;
+      const min = Math.min(...values) - 12;
+      const max = Math.max(...values) + 12;
+      const left = 42, right = 686, top = 18, bottom = 132;
+      const xAt = (index) => left + (index / (values.length - 1)) * (right - left);
+      const yAt = (value) => bottom - ((value - min) / (max - min)) * (bottom - top);
+      const line = values.map((value, index) => `${index ? "L" : "M"}${xAt(index).toFixed(1)} ${yAt(value).toFixed(1)}`).join(" ");
+      const area = `${line} L${right} ${bottom} L${left} ${bottom} Z`;
+      elements.elevationSvg.innerHTML = `
+        <line class="grid-line" x1="${left}" y1="${top}" x2="${right}" y2="${top}"></line>
+        <line class="grid-line" x1="${left}" y1="${(top+bottom)/2}" x2="${right}" y2="${(top+bottom)/2}"></line>
+        <line class="grid-line" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}"></line>
+        <text class="axis-label" x="2" y="${top+4}">${max} m</text><text class="axis-label" x="2" y="${bottom+4}">${min} m</text>
+        <path class="profile-area" d="${area}"></path><path class="profile-line" d="${line}"></path>
+        <line class="profile-marker" id="profileMarker" x1="${left}" y1="${top}" x2="${left}" y2="${bottom}"></line>
+        <circle class="profile-dot" id="profileDot" cx="${left}" cy="${yAt(values[0])}" r="5"></circle>
+        <text class="axis-label" x="${left}" y="158">0 km</text><text class="axis-label" text-anchor="middle" x="${(left+right)/2}" y="158">${Math.round(day.distance/2)} km</text><text class="axis-label" text-anchor="end" x="${right}" y="158">${day.distance} km</text>
+        <rect id="profileHit" x="${left}" y="${top}" width="${right-left}" height="${bottom-top}" fill="transparent"></rect>`;
+      const hit = document.getElementById("profileHit");
+      hit.addEventListener("pointermove", (event) => {
+        const rect = hit.getBoundingClientRect();
+        const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+        const position = interpolateRoute(day.route, ratio);
+        const valueIndex = ratio * (values.length - 1);
+        const low = Math.floor(valueIndex);
+        const high = Math.min(values.length - 1, low + 1);
+        const elevation = values[low] + (values[high] - values[low]) * (valueIndex - low);
+        const x = left + ratio * (right - left);
+        const y = yAt(elevation);
+        const marker = document.getElementById("profileMarker");
+        const dot = document.getElementById("profileDot");
+        marker.setAttribute("x1", x); marker.setAttribute("x2", x); marker.style.opacity = 1;
+        dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.style.opacity = 1;
+        elements.profileReadout.textContent = `${Math.round(day.distance * ratio)} km · ${Math.round(elevation)} m`;
+        if (state.mapsReady && state.positionMarker) {
+          state.positionMarker.position = { lat: position[0], lng: position[1] };
+          state.positionNode.classList.add("visible");
+        }
+      });
+      hit.addEventListener("pointerleave", () => {
+        document.getElementById("profileMarker").style.opacity = 0;
+        document.getElementById("profileDot").style.opacity = 0;
+        elements.profileReadout.textContent = "Move across the profile to locate yourself on the map.";
+        if (state.positionNode) state.positionNode.classList.remove("visible");
+      });
+    }
+
+    function interpolateRoute(route, ratio) {
+      const position = ratio * (route.length - 1);
+      const low = Math.floor(position);
+      const high = Math.min(route.length - 1, low + 1);
+      const fraction = position - low;
+      return [
+        route[low][0] + (route[high][0] - route[low][0]) * fraction,
+        route[low][1] + (route[high][1] - route[low][1]) * fraction
+      ];
+    }
+
+    function downloadGpx() {
+      const day = tripDays[state.dayIndex];
+      const track = day.route.map((point) => `<trkpt lat="${point[0]}" lon="${point[1]}"></trkpt>`).join("");
+      const xml = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="VeloPlan Europe"><trk><name>Day ${state.dayIndex + 1}: ${escapeXml(day.title)}</name><trkseg>${track}</trkseg></trk></gpx>`;
+      const blob = new Blob([xml], { type: "application/gpx+xml" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `veloplan-day-${state.dayIndex + 1}.gpx`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 500);
+      toast("Route GPX downloaded. Recommendation details stay in the app.");
+    }
+
+    function toLatLng(point) { return { lat: point[0], lng: point[1] }; }
+    function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+    function formatNumber(value) { return new Intl.NumberFormat("en").format(value); }
+    function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[char]); }
+    function escapeAttribute(value) { return escapeHtml(value); }
+    function escapeXml(value) { return escapeHtml(value); }
+    let toastTimer;
+    function toast(message) { elements.toast.textContent = message; elements.toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => elements.toast.classList.remove("show"), 2600); }
+
+    document.getElementById("distanceRange").addEventListener("input", (event) => { document.getElementById("distanceValue").textContent = `45–${event.target.value} km`; });
+    document.getElementById("regenerateButton").addEventListener("click", () => toast("Route regenerated with your current preferences."));
+    document.getElementById("gpxButton").addEventListener("click", downloadGpx);
+    document.getElementById("shareButton").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(location.href); toast("Trip link copied."); }
+      catch { toast("Copy the address from your browser to share this trip."); }
+    });
+
+    renderDayButtons();
+    renderDayHeading();
+    renderElevation();
+    renderFallbackThenLoad();
+    loadGoogleServices();
+  </script>
+</body>
+</html>
