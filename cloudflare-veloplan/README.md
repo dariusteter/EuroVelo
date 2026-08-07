@@ -5,8 +5,11 @@ This project is the secure, full-stack version of the bicycle trip planner demo.
 ## What changed
 
 - Three lunch recommendations and three lodging recommendations for every day.
-- A live Google map with pan, zoom, route lines, and color-coded recommendation markers.
-- Elevation-profile hover moves a corresponding marker on the map.
+- High-quality Google bicycle routes that follow mapped roads and paths instead of five-point demo lines.
+- A live Google map with pan, zoom, detailed route geometry, and color-coded recommendation markers.
+- A 256-sample Google elevation profile whose hover position moves along the real route on the map.
+- Lodging searches honor the selected camping, hostel, guest-house, and hotel categories.
+- Every recommendation card links directly to the place website when available and shows its phone number when Google provides one.
 - Google Places (New) calls run through the Worker, so the server key is never sent to the browser.
 - A separate browser-restricted Maps JavaScript API key is loaded at runtime rather than committed to GitHub.
 - Realistic demo recommendations remain visible if Google Places is temporarily unavailable.
@@ -29,8 +32,10 @@ Use two separate keys:
    - API restriction: **Maps JavaScript API** only.
 
 2. `GOOGLE_PLACES_SERVER_KEY`
-   - Use the existing Places key or create a new one.
-   - API restriction: **Places API (New)** only.
+   - This is the server-only Google Maps Platform key despite the legacy environment-variable name.
+   - Enable **Places API (New)**, **Routes API**, and **Elevation API**.
+   - API restriction: those three APIs only.
+   - Application restriction: none, because ordinary Workers do not have a fixed outbound IP or browser referrer.
    - Store it only as an encrypted Cloudflare Worker secret.
 
 Never place either real value in this repository. If a real server key has ever been committed publicly, rotate it in Google Cloud.
@@ -69,4 +74,4 @@ Add both required values under **Worker → Settings → Variables and Secrets**
 
 ## API safeguards
 
-The Worker limits searches to Europe, accepts only lunch and lodging searches, caps the radius, returns at most three results, uses a fixed Google field mask, rejects cross-origin browser requests, and never caches Places responses. Add a Cloudflare rate-limiting rule before promoting the prototype beyond a small private test group.
+The Worker limits searches and daily routes to Europe, accepts only allowlisted lodging preferences, caps search radii, returns at most three results, uses fixed Google field masks, rejects requests without the correct browser origin, and never caches Places responses. The Cloudflare rate-limiting rule should cover both `/api/places` and `/api/route`.
