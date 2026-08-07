@@ -8,6 +8,10 @@ const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
 if (!html.includes('id="map"')) throw new Error("Map container is missing");
 if (!html.includes('id="lunchChoices"')) throw new Error("Lunch choices are missing");
 if (!html.includes('id="lodgingChoices"')) throw new Error("Lodging choices are missing");
+if (!html.includes('fetch("/api/route"')) throw new Error("Detailed route loading is missing");
+if (!html.includes('value="guest_house"')) throw new Error("Lodging preference values are missing");
+if (!html.includes('target="_blank"')) throw new Error("External recommendation links are missing");
+if (!html.includes('Phone not listed')) throw new Error("Phone availability is not shown on cards");
 
 for (const [index, script] of scripts.entries()) {
   try {
