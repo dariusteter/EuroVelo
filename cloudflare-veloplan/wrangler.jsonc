@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "veloplan-europe",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-08-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "secrets": {
+    "required": [
+      "GOOGLE_MAPS_BROWSER_KEY",
+      "GOOGLE_PLACES_SERVER_KEY"
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true
+    }
+  }
+}
