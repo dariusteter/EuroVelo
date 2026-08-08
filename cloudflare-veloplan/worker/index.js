@@ -1,14 +1,26 @@
 const GOOGLE_NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby";
-const GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
-const GOOGLE_ELEVATION_URL = "https://maps.googleapis.com/maps/api/elevation/json";
+const GOOGLE_AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete";
+const GOOGLE_PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places";
+const OPENROUTESERVICE_DIRECTIONS_URL = "https://api.heigit.org/openrouteservice/v2/directions";
 const MAX_BODY_BYTES = 2048;
-const ALLOWED_KINDS = new Set(["lunch", "lodging"]);
+const ALLOWED_KINDS = new Set(["lunch", "lodging", "attraction", "city", "city_details"]);
 const ALLOWED_SURFACE_PREFERENCES = new Set(["bike_paths", "gravel", "quiet_roads"]);
 const LODGING_PRIMARY_TYPES = Object.freeze({
   camping: ["campground", "camping_cabin", "rv_park"],
   hostel: ["hostel"],
   guest_house: ["guest_house", "bed_and_breakfast", "inn", "private_guest_room", "farmstay", "cottage"],
   hotel: ["hotel", "motel", "extended_stay_hotel", "resort_hotel"]
+});
+const ATTRACTION_PRIMARY_TYPES = Object.freeze([
+  "art_museum", "botanical_garden", "castle", "cultural_landmark", "historical_landmark",
+  "historical_place", "history_museum", "monument", "museum", "national_park",
+  "nature_preserve", "observation_deck", "scenic_spot", "state_park", "tourist_attraction",
+  "wildlife_refuge"
+]);
+const ROUTING_PROFILES = Object.freeze({
+  bike_paths: "cycling-regular",
+  gravel: "cycling-mountain",
+  quiet_roads: "cycling-road"
 });
 
 const FIELD_MASK = [
@@ -28,7 +40,7 @@ const FIELD_MASK = [
 ].join(",");
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     try {
@@ -37,11 +49,11 @@ export default {
       }
 
       if (url.pathname === "/api/places") {
-        return await handlePlaces(request, env);
+        return await handlePlaces(request, env, ctx);
       }
 
       if (url.pathname === "/api/route") {
-        return await handleRoute(request, env);
+        return await handleRoute(request, env, ctx);
       }
 
       const assetResponse = await env.ASSETS.fetch(request);
@@ -65,11 +77,11 @@ function handleConfig(request, env) {
   return json({
     googleMapsBrowserKey: env.GOOGLE_MAPS_BROWSER_KEY || "",
     livePlacesAvailable: Boolean(env.GOOGLE_PLACES_SERVER_KEY),
-    liveRoutingAvailable: Boolean(env.GOOGLE_PLACES_SERVER_KEY)
+    liveRoutingAvailable: Boolean(env.OPENROUTESERVICE_API_KEY)
   }, 200, { "Cache-Control": "no-store" });
 }
 
-async function handlePlaces(request, env) {
+async function handlePlaces(request, env, ctx) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: apiHeaders() });
   }
@@ -103,12 +115,21 @@ async function handlePlaces(request, env) {
     return json({ error: validation.error }, 400);
   }
 
-  const { kind, latitude, longitude, radiusMeters, lodgingPreferences } = validation.value;
+  const { kind, latitude, longitude, radiusMeters, lodgingPreference, attractionAnchors, query, placeId, sessionToken } = validation.value;
+  if (kind === "city") {
+    return await handleCitySearch(env, query, sessionToken);
+  }
+  if (kind === "city_details") {
+    return await handleCityDetails(env, placeId, sessionToken);
+  }
   const includedPrimaryTypes = kind === "lunch"
     ? ["restaurant", "cafe"]
-    : lodgingPreferences.flatMap((preference) => LODGING_PRIMARY_TYPES[preference]);
+    : kind === "lodging"
+      ? LODGING_PRIMARY_TYPES[lodgingPreference]
+      : ATTRACTION_PRIMARY_TYPES;
 
-  const googleResponse = await fetch(GOOGLE_NEARBY_URL, {
+  const searchCenters = kind === "attraction" ? attractionAnchors : [{ latitude, longitude }];
+  const googleResponses = await Promise.all(searchCenters.map((center) => fetch(GOOGLE_NEARBY_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -117,12 +138,64 @@ async function handlePlaces(request, env) {
     },
     body: JSON.stringify({
       includedPrimaryTypes,
-      maxResultCount: 3,
+      maxResultCount: kind === "attraction" ? 10 : 3,
       rankPreference: "POPULARITY",
       locationRestriction: {
         circle: {
-          center: { latitude, longitude },
+          center,
           radius: radiusMeters
+        }
+      }
+    })
+  })));
+
+  const failedResponse = googleResponses.find((response) => !response.ok);
+  if (failedResponse) {
+    console.error(JSON.stringify({
+      event: "google_places_error",
+      status: failedResponse.status,
+      kind
+    }));
+    return json({ error: "Live recommendations are temporarily unavailable." }, 502);
+  }
+
+  const data = await Promise.all(googleResponses.map((response) => response.json()));
+  const uniquePlaces = new Map();
+  data.flatMap((result) => Array.isArray(result.places) ? result.places : [])
+    .forEach((place) => uniquePlaces.set(String(place.id || place.displayName?.text || ""), place));
+  const places = [...uniquePlaces.values()]
+        .filter((place) => place.businessStatus !== "CLOSED_PERMANENTLY")
+        .filter((place) => kind === "lunch" || includedPrimaryTypes.includes(place.primaryType))
+        .filter((place) => kind !== "attraction" || (Number(place.rating) >= 4.4 && Number(place.userRatingCount) >= 50))
+        .sort((left, right) => kind === "attraction" ? attractionScore(right) - attractionScore(left) : 0)
+        .slice(0, 3)
+        .map(normalizePlace);
+
+  return json({ places }, 200, { "Cache-Control": "no-store" });
+}
+
+async function handleCitySearch(env, query, sessionToken) {
+  const googleResponse = await fetch(GOOGLE_AUTOCOMPLETE_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": env.GOOGLE_PLACES_SERVER_KEY,
+      "X-Goog-FieldMask": [
+        "suggestions.placePrediction.placeId",
+        "suggestions.placePrediction.text.text",
+        "suggestions.placePrediction.structuredFormat.mainText.text",
+        "suggestions.placePrediction.structuredFormat.secondaryText.text"
+      ].join(",")
+    },
+    body: JSON.stringify({
+      input: query,
+      includedPrimaryTypes: ["(cities)"],
+      languageCode: "en",
+      sessionToken,
+      locationRestriction: {
+        rectangle: {
+          low: { latitude: 34, longitude: -25 },
+          high: { latitude: 72, longitude: 45 }
         }
       }
     })
@@ -130,26 +203,55 @@ async function handlePlaces(request, env) {
 
   if (!googleResponse.ok) {
     console.error(JSON.stringify({
-      event: "google_places_error",
-      status: googleResponse.status,
-      kind
+      event: "google_city_search_error",
+      status: googleResponse.status
     }));
-    return json({ error: "Live recommendations are temporarily unavailable." }, 502);
+    return json({ error: "City suggestions are temporarily unavailable." }, 502);
   }
 
   const data = await googleResponse.json();
-  const places = Array.isArray(data.places)
-    ? data.places
-        .filter((place) => place.businessStatus !== "CLOSED_PERMANENTLY")
-        .filter((place) => kind === "lunch" || includedPrimaryTypes.includes(place.primaryType))
-        .slice(0, 3)
-        .map(normalizePlace)
-    : [];
-
-  return json({ places }, 200, { "Cache-Control": "no-store" });
+  const cities = (Array.isArray(data.suggestions) ? data.suggestions : [])
+    .map((suggestion) => suggestion.placePrediction)
+    .filter((prediction) => prediction?.placeId && prediction?.text?.text)
+    .map((prediction) => ({
+      id: String(prediction.placeId),
+      name: String(prediction.structuredFormat?.mainText?.text || prediction.text.text),
+      label: String(prediction.text.text)
+    }));
+  return json({ cities }, 200, { "Cache-Control": "no-store" });
 }
 
-async function handleRoute(request, env) {
+async function handleCityDetails(env, placeId, sessionToken) {
+  const url = new URL(`${GOOGLE_PLACE_DETAILS_URL}/${encodeURIComponent(placeId)}`);
+  url.searchParams.set("sessionToken", sessionToken);
+  const googleResponse = await fetch(url, {
+    headers: {
+      "X-Goog-Api-Key": env.GOOGLE_PLACES_SERVER_KEY,
+      "X-Goog-FieldMask": "id,displayName,formattedAddress,location"
+    }
+  });
+  if (!googleResponse.ok) {
+    console.error(JSON.stringify({
+      event: "google_city_details_error",
+      status: googleResponse.status
+    }));
+    return json({ error: "That city could not be resolved." }, 502);
+  }
+  const place = await googleResponse.json();
+  const point = validateEuropePoint(place.location);
+  if (!point) return json({ error: "Select a city within Europe." }, 400);
+  return json({
+    city: {
+      id: String(place.id || placeId),
+      name: String(place.displayName?.text || place.formattedAddress || "Unknown city"),
+      label: String(place.formattedAddress || place.displayName?.text || "Unknown city"),
+      latitude: point.latitude,
+      longitude: point.longitude
+    }
+  }, 200, { "Cache-Control": "no-store" });
+}
+
+async function handleRoute(request, env, ctx) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: apiHeaders() });
   }
@@ -162,7 +264,7 @@ async function handleRoute(request, env) {
     return json({ error: "Cross-origin requests are not allowed." }, 403);
   }
 
-  if (!env.GOOGLE_PLACES_SERVER_KEY) {
+  if (!env.OPENROUTESERVICE_API_KEY) {
     return json({ error: "Live routing is not configured yet." }, 503);
   }
 
@@ -183,72 +285,147 @@ async function handleRoute(request, env) {
     return json({ error: validation.error }, 400);
   }
 
-  const { origin, destination } = validation.value;
-  const googleResponse = await fetch(GOOGLE_ROUTES_URL, {
+  const { origin, destination, surfacePreference } = validation.value;
+  const profile = ROUTING_PROFILES[surfacePreference];
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cacheKey = routeCacheKey(request, origin, destination, profile);
+  const cachedResponse = cache ? await cache.match(cacheKey) : null;
+  if (cachedResponse) {
+    return cloneWithHeaders(cachedResponse, {
+      "Cache-Control": "private, max-age=3600",
+      "X-Route-Cache": "HIT"
+    });
+  }
+  const routingResponse = await fetch(`${OPENROUTESERVICE_DIRECTIONS_URL}/${profile}/geojson`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Goog-Api-Key": env.GOOGLE_PLACES_SERVER_KEY,
-      "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline"
+      "Authorization": env.OPENROUTESERVICE_API_KEY
     },
     body: JSON.stringify({
-      origin: { location: { latLng: origin } },
-      destination: { location: { latLng: destination } },
-      travelMode: "BICYCLE",
-      polylineQuality: "HIGH_QUALITY",
-      polylineEncoding: "ENCODED_POLYLINE"
+      coordinates: [
+        [origin.longitude, origin.latitude],
+        [destination.longitude, destination.latitude]
+      ],
+      preference: "recommended",
+      elevation: true,
+      instructions: false,
+      geometry_simplify: false
     })
   });
 
-  if (!googleResponse.ok) {
-    console.error(JSON.stringify({ event: "google_routes_error", status: googleResponse.status }));
+  if (!routingResponse.ok) {
+    console.error(JSON.stringify({
+      event: "openrouteservice_error",
+      status: routingResponse.status,
+      profile
+    }));
+    if (routingResponse.status === 429) {
+      const retryAfter = boundedRetryAfter(routingResponse.headers.get("Retry-After"));
+      return json({ error: "The bicycle routing service is busy. Please try again shortly." }, 429, {
+        "Retry-After": String(retryAfter)
+      });
+    }
     return json({ error: "The detailed bicycle route is temporarily unavailable." }, 502);
   }
 
-  const data = await googleResponse.json();
-  const route = Array.isArray(data.routes) ? data.routes[0] : null;
-  const encodedPolyline = String(route?.polyline?.encodedPolyline || "");
-  if (!encodedPolyline) {
-    return json({ error: "Google did not return a bicycle route for these points." }, 404);
+  const data = await routingResponse.json();
+  const feature = Array.isArray(data.features) ? data.features[0] : null;
+  const coordinates = Array.isArray(feature?.geometry?.coordinates)
+    ? feature.geometry.coordinates.filter(isRouteCoordinate)
+    : [];
+  if (coordinates.length < 2) {
+    return json({ error: "OpenRouteService did not return a bicycle route for these points." }, 404);
   }
 
-  const elevation = await fetchElevationProfile(encodedPolyline, env.GOOGLE_PLACES_SERVER_KEY);
-  return json({
-    encodedPolyline,
-    distanceMeters: Number(route.distanceMeters || 0),
-    durationSeconds: parseDurationSeconds(route.duration),
-    elevations: elevation.values,
-    ascentMeters: elevation.ascentMeters,
-    elevationAvailable: elevation.values.length > 1
-  }, 200, { "Cache-Control": "private, max-age=3600" });
+  const summary = feature?.properties?.summary || {};
+  const elevations = sampleRouteElevations(coordinates, 256);
+  const fullElevations = coordinates.map((coordinate) => Number(coordinate[2])).filter(Number.isFinite);
+  const payload = {
+    route: coordinates.map((coordinate) => [
+      Number(coordinate[1]),
+      Number(coordinate[0]),
+      Number.isFinite(Number(coordinate[2])) ? Number(coordinate[2]) : null
+    ]),
+    distanceMeters: Number(summary.distance || 0),
+    durationSeconds: Math.round(Number(summary.duration || 0)),
+    elevations,
+    ascentMeters: Math.round(Number(feature?.properties?.ascent || calculateAscent(fullElevations))),
+    elevationAvailable: elevations.length > 1,
+    routeProvider: "OpenStreetMap / openrouteservice"
+  };
+  const response = json(payload, 200, {
+    "Cache-Control": "private, max-age=3600",
+    "X-Route-Cache": "MISS"
+  });
+  if (cache) {
+    const cacheWrite = cache.put(cacheKey, json(payload, 200, {
+      "Cache-Control": "public, max-age=86400"
+    }));
+    if (ctx) ctx.waitUntil(cacheWrite);
+    else await cacheWrite;
+  }
+  return response;
 }
 
-async function fetchElevationProfile(encodedPolyline, apiKey) {
-  const url = new URL(GOOGLE_ELEVATION_URL);
-  url.searchParams.set("path", `enc:${encodedPolyline}`);
-  url.searchParams.set("samples", "256");
-  url.searchParams.set("key", apiKey);
+function routeCacheKey(request, origin, destination, profile) {
+  const url = new URL("/__route-cache", request.url);
+  url.searchParams.set("origin", `${origin.latitude.toFixed(5)},${origin.longitude.toFixed(5)}`);
+  url.searchParams.set("destination", `${destination.latitude.toFixed(5)},${destination.longitude.toFixed(5)}`);
+  url.searchParams.set("profile", profile);
+  return new Request(url, { method: "GET" });
+}
 
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.error(JSON.stringify({ event: "google_elevation_error", status: response.status }));
-      return { values: [], ascentMeters: 0 };
-    }
-    const data = await response.json();
-    if (data.status !== "OK" || !Array.isArray(data.results)) {
-      console.error(JSON.stringify({ event: "google_elevation_status", status: String(data.status || "UNKNOWN") }));
-      return { values: [], ascentMeters: 0 };
-    }
-    const values = data.results.map((result) => Number(result.elevation)).filter(Number.isFinite);
-    return { values, ascentMeters: calculateAscent(values) };
-  } catch (error) {
-    console.error(JSON.stringify({
-      event: "google_elevation_request_failed",
-      error: error instanceof Error ? error.message : "unknown_error"
-    }));
-    return { values: [], ascentMeters: 0 };
+function cloneWithHeaders(response, extraHeaders) {
+  const headers = new Headers(response.headers);
+  Object.entries(extraHeaders).forEach(([name, value]) => headers.set(name, value));
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+
+function boundedRetryAfter(value) {
+  const seconds = Number(value);
+  return Number.isFinite(seconds) ? Math.min(120, Math.max(2, Math.ceil(seconds))) : 10;
+}
+
+function isRouteCoordinate(value) {
+  return Array.isArray(value)
+    && value.length >= 2
+    && Number.isFinite(Number(value[0]))
+    && Number.isFinite(Number(value[1]));
+}
+
+function sampleRouteElevations(coordinates, sampleCount) {
+  const elevated = coordinates.filter((coordinate) => Number.isFinite(Number(coordinate[2])));
+  if (elevated.length < 2) return [];
+  const cumulative = [0];
+  for (let index = 1; index < elevated.length; index += 1) {
+    cumulative.push(cumulative[index - 1] + coordinateDistanceMeters(elevated[index - 1], elevated[index]));
   }
+  const total = cumulative[cumulative.length - 1];
+  if (!total) return elevated.slice(0, sampleCount).map((coordinate) => Number(coordinate[2]));
+  const values = [];
+  let high = 1;
+  for (let sample = 0; sample < sampleCount; sample += 1) {
+    const target = total * sample / (sampleCount - 1);
+    while (high < cumulative.length - 1 && cumulative[high] < target) high += 1;
+    const low = Math.max(0, high - 1);
+    const span = cumulative[high] - cumulative[low] || 1;
+    const fraction = (target - cumulative[low]) / span;
+    const elevation = Number(elevated[low][2]) + (Number(elevated[high][2]) - Number(elevated[low][2])) * fraction;
+    values.push(Math.round(elevation * 10) / 10);
+  }
+  return values;
+}
+
+function coordinateDistanceMeters(left, right) {
+  return haversineMeters(
+    { latitude: Number(left[1]), longitude: Number(left[0]) },
+    { latitude: Number(right[1]), longitude: Number(right[0]) }
+  );
 }
 
 function validateRouteRequest(input) {
@@ -261,13 +438,17 @@ function validateRouteRequest(input) {
     return { ok: false, error: "Origin and destination must be valid locations in Europe." };
   }
   const surfacePreference = String(input.surfacePreference || "bike_paths");
+  const tripPlan = input.tripPlan === true;
   if (!ALLOWED_SURFACE_PREFERENCES.has(surfacePreference)) {
     return { ok: false, error: "The surface preference is invalid." };
   }
-  if (haversineMeters(origin, destination) > 300000) {
-    return { ok: false, error: "A single daily route cannot exceed 300 km." };
+  const maximumDistance = tripPlan ? 6000000 : 300000;
+  if (haversineMeters(origin, destination) > maximumDistance) {
+    return { ok: false, error: tripPlan
+      ? "This trip exceeds the 6,000 km routing limit."
+      : "A single daily route cannot exceed 300 km." };
   }
-  return { ok: true, value: { origin, destination, surfacePreference } };
+  return { ok: true, value: { origin, destination, surfacePreference, tripPlan } };
 }
 
 function validateEuropePoint(value) {
@@ -277,11 +458,6 @@ function validateEuropePoint(value) {
   if (!Number.isFinite(latitude) || latitude < 34 || latitude > 72) return null;
   if (!Number.isFinite(longitude) || longitude < -25 || longitude > 45) return null;
   return { latitude, longitude };
-}
-
-function parseDurationSeconds(value) {
-  const match = String(value || "").match(/^(\d+(?:\.\d+)?)s$/);
-  return match ? Math.round(Number(match[1])) : 0;
 }
 
 function calculateAscent(values) {
@@ -309,15 +485,40 @@ function validateSearch(input) {
   }
 
   const kind = String(input.kind || "");
+  const query = String(input.query || "").trim();
+  const placeId = String(input.placeId || "").trim();
+  const sessionToken = String(input.sessionToken || "").trim();
   const latitude = Number(input.latitude);
   const longitude = Number(input.longitude);
   const requestedRadius = Number(input.radiusMeters || 5000);
-  const lodgingPreferences = Array.isArray(input.lodgingPreferences)
-    ? [...new Set(input.lodgingPreferences.map(String))]
+  const lodgingPreference = String(input.lodgingPreference || "");
+  const rawAttractionAnchors = kind === "attraction" && Array.isArray(input.attractionAnchors)
+    ? input.attractionAnchors
     : [];
+  const attractionAnchors = rawAttractionAnchors.length
+    ? rawAttractionAnchors.map(validateEuropePoint)
+    : [{ latitude, longitude }];
 
   if (!ALLOWED_KINDS.has(kind)) {
-    return { ok: false, error: "kind must be lunch or lodging." };
+    return { ok: false, error: "The Places request kind is invalid." };
+  }
+  if (kind === "city") {
+    if (query.length < 2 || query.length > 80) {
+      return { ok: false, error: "City searches must contain between 2 and 80 characters." };
+    }
+    if (sessionToken.length < 8 || sessionToken.length > 100) {
+      return { ok: false, error: "City searches require a valid session token." };
+    }
+    return { ok: true, value: { kind, query, sessionToken } };
+  }
+  if (kind === "city_details") {
+    if (!/^[A-Za-z0-9_-]{8,300}$/.test(placeId)) {
+      return { ok: false, error: "The selected city identifier is invalid." };
+    }
+    if (sessionToken.length < 8 || sessionToken.length > 100) {
+      return { ok: false, error: "City details require a valid session token." };
+    }
+    return { ok: true, value: { kind, placeId, sessionToken } };
   }
   if (!Number.isFinite(latitude) || latitude < 34 || latitude > 72) {
     return { ok: false, error: "latitude must be within Europe." };
@@ -329,12 +530,16 @@ function validateSearch(input) {
     return { ok: false, error: "radiusMeters must be numeric." };
   }
   if (kind === "lodging") {
-    if (!lodgingPreferences.length || lodgingPreferences.length > Object.keys(LODGING_PRIMARY_TYPES).length) {
-      return { ok: false, error: "Select between one and four lodging preferences." };
+    if (!LODGING_PRIMARY_TYPES[lodgingPreference]) {
+      return { ok: false, error: "Select exactly one valid lodging preference." };
     }
-    if (lodgingPreferences.some((preference) => !LODGING_PRIMARY_TYPES[preference])) {
-      return { ok: false, error: "One or more lodging preferences are invalid." };
-    }
+  }
+  if (kind === "attraction" && (
+    !attractionAnchors.length
+    || attractionAnchors.length > 3
+    || attractionAnchors.some((anchor) => !anchor)
+  )) {
+    return { ok: false, error: "Sightseeing searches require between one and three route anchors." };
   }
 
   return {
@@ -344,9 +549,14 @@ function validateSearch(input) {
       latitude,
       longitude,
       radiusMeters: Math.min(10000, Math.max(500, Math.round(requestedRadius))),
-      lodgingPreferences
+      lodgingPreference,
+      attractionAnchors
     }
   };
+}
+
+function attractionScore(place) {
+  return Number(place.rating || 0) * Math.log10(Number(place.userRatingCount || 0) + 10);
 }
 
 function normalizePlace(place) {

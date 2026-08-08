@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Plan flexible multi-day bicycle trips across Europe.">
-  <title>VeloPlan Europe</title>
+  <title>Europe Bike Tour Planner</title>
   <style>
     :root {
       color-scheme: light;
@@ -51,8 +51,16 @@
     .setup-panel { padding: 16px; display: grid; gap: 17px; }
     .field { display: grid; gap: 7px; }
     .field label, legend { font-weight: 750; font-size: 13px; }
-    select, input[type="range"] { width: 100%; }
-    select { border: 1px solid var(--line); border-radius: 11px; padding: 10px; color: var(--ink); background: white; }
+    select, input[type="range"], input[type="text"] { width: 100%; }
+    select, input[type="text"] { border: 1px solid var(--line); border-radius: 11px; padding: 10px; color: var(--ink); background: white; }
+    .city-field { position: relative; }
+    .city-suggestions { position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; right: 0; display: grid; max-height: 230px; overflow: auto; padding: 5px; border: 1px solid var(--line); border-radius: 12px; background: white; box-shadow: 0 12px 30px rgba(24,32,27,.16); }
+    .city-suggestions[hidden] { display: none; }
+    .city-option { appearance: none; width: 100%; border: 0; border-radius: 8px; padding: 9px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+    .city-option:hover, .city-option:focus-visible { background: var(--brand-soft); }
+    .city-option strong, .city-option small { display: block; }
+    .city-option small { margin-top: 2px; color: var(--muted); }
+    .city-search-message { padding: 9px; color: var(--muted); font-size: 12px; }
     fieldset { margin: 0; padding: 0; border: 0; }
     legend { margin-bottom: 8px; }
     .checks { display: grid; gap: 7px; }
@@ -76,11 +84,13 @@
     .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
     .legend-dot.lunch { background: var(--lunch); }
     .legend-dot.lodging { background: var(--lodging); }
+    .legend-dot.attraction { background: var(--attraction); }
     .legend-dot.route { background: var(--brand); }
     .map-pin { width: 28px; height: 28px; border: 3px solid white; border-radius: 50% 50% 50% 8px; transform: rotate(-45deg); display: grid; place-items: center; box-shadow: 0 3px 10px rgba(24,32,27,.24); color: white; }
     .map-pin span { transform: rotate(45deg); font-size: 12px; font-weight: 850; }
     .map-pin.lunch { background: var(--lunch); }
     .map-pin.lodging { background: var(--lodging); }
+    .map-pin.attraction { background: var(--attraction); }
     .map-pin.position { width: 22px; height: 22px; border-radius: 50%; background: var(--brand); transform: none; opacity: 0; }
     .map-pin.position.visible { opacity: 1; }
     .elevation { padding: 14px 16px 10px; }
@@ -110,9 +120,6 @@
     .choice-actions button { appearance: none; border: 0; padding: 0; background: none; color: var(--brand); font: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
     .phone-unavailable { color: var(--muted); font-weight: 500; }
     .source-badge { display: inline-block; padding: 2px 6px; border-radius: 999px; background: var(--paper); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
-    .details { border-top: 1px solid var(--line); padding-top: 14px; }
-    .details p { margin: 8px 0; font-size: 13px; color: var(--muted); }
-    .details-links { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; font-weight: 700; }
     .loading-row { padding: 13px; border-radius: 12px; background: var(--paper); color: var(--muted); font-size: 13px; }
     .route-warning { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
     .toast { position: fixed; right: 18px; bottom: 18px; z-index: 50; max-width: min(360px, calc(100vw - 36px)); padding: 12px 14px; border-radius: 12px; background: var(--ink); color: white; box-shadow: var(--shadow); transform: translateY(18px); opacity: 0; pointer-events: none; transition: .2s ease; }
@@ -121,7 +128,6 @@
     @media (max-width: 1120px) {
       .planner { grid-template-columns: 210px minmax(0, 1fr); }
       .recommendations { grid-column: 1 / -1; max-height: none; grid-template-columns: 1fr 1fr; }
-      .details { grid-column: 1 / -1; }
     }
     @media (max-width: 760px) {
       .topbar, .trip-header { align-items: flex-start; }
@@ -143,7 +149,7 @@
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">↟</span><span>VeloPlan Europe</span></div>
+      <div class="brand"><span class="brand-mark" aria-hidden="true">↟</span><span>Europe Bike Tour Planner</span></div>
       <div class="top-actions">
         <button class="button ghost" type="button" id="shareButton">Share trip</button>
         <button class="button primary" type="button" id="gpxButton">Download route GPX</button>
@@ -153,21 +159,23 @@
     <main class="main">
       <section class="trip-header">
         <div>
-          <h1>Vienna to Budapest, at touring pace.</h1>
-          <p class="subtle">Four flexible days along the Danube · 284 km · bike paths first</p>
+          <h1 id="tripTitle">Plan your next European bike tour.</h1>
+          <p class="subtle" id="tripSubtitle">Choose a starting city and destination to create a multi-day bicycle route.</p>
         </div>
         <div class="status-pill"><span class="status-dot"></span><span id="liveStatus">Loading map service…</span></div>
       </section>
 
       <div class="planner">
         <aside class="panel setup-panel" aria-label="Trip preferences">
-          <div class="field">
+          <div class="field city-field">
             <label for="startCity">Start</label>
-            <select id="startCity"><option>Vienna, Austria</option><option>Vienna, France</option><option>Vienna, Italy</option></select>
+            <input id="startCity" type="text" value="Vienna, Austria" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="startCitySuggestions">
+            <div class="city-suggestions" id="startCitySuggestions" role="listbox" hidden></div>
           </div>
-          <div class="field">
+          <div class="field city-field">
             <label for="endCity">Destination</label>
-            <select id="endCity"><option>Budapest, Hungary</option><option>Budapest, Georgia</option></select>
+            <input id="endCity" type="text" value="Budapest, Hungary" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="endCitySuggestions">
+            <div class="city-suggestions" id="endCitySuggestions" role="listbox" hidden></div>
           </div>
           <div class="field">
             <div class="range-head"><span>Daily distance</span><strong id="distanceValue">45–75 km</strong></div>
@@ -182,17 +190,18 @@
               <label class="check"><input type="radio" name="surface" value="quiet_roads"> Quiet roads are OK</label>
             </div>
           </fieldset>
-          <fieldset>
-            <legend>Lodging</legend>
-            <div class="checks" id="lodgingPreferences">
-              <label class="check"><input type="checkbox" value="camping" checked> Camping</label>
-              <label class="check"><input type="checkbox" value="hostel" checked> Hostel</label>
-              <label class="check"><input type="checkbox" value="guest_house" checked> Guest house</label>
-              <label class="check"><input type="checkbox" value="hotel"> Hotel</label>
-            </div>
-          </fieldset>
+          <div class="field">
+            <label for="lodgingPreference" id="lodgingDayLabel">Day 1 lodging</label>
+            <select id="lodgingPreference">
+              <option value="camping">Camping</option>
+              <option value="hostel">Hostel</option>
+              <option value="guest_house">Guest house</option>
+              <option value="hotel">Hotel</option>
+            </select>
+            <small class="subtle">Choose exactly one type for the selected day.</small>
+          </div>
           <div>
-            <h3>Your four days</h3>
+            <h3 id="dayCountHeading">Your four days</h3>
             <div class="day-list" id="dayList"></div>
           </div>
           <button class="button primary" type="button" id="regenerateButton">Regenerate trip</button>
@@ -202,7 +211,7 @@
           <div>
             <h2 id="dayTitle">Vienna → Bratislava</h2>
             <p class="subtle" id="daySummary">68 km · 240 m ascent · about 4h 10m riding</p>
-            <p class="route-warning" id="routeWarning" hidden>Google bicycle directions are in beta and may not always include a clear bicycle or pedestrian path.</p>
+            <p class="route-warning" id="routeWarning" hidden>Route data © OpenStreetMap contributors · routing by openrouteservice. Always verify local cycling conditions.</p>
           </div>
           <div class="panel map-card">
             <div id="map" aria-label="Interactive map showing the daily bicycle route and recommendations"></div>
@@ -213,6 +222,7 @@
               <span class="legend-item"><span class="legend-dot route"></span>Route</span>
               <span class="legend-item"><span class="legend-dot lunch"></span>Lunch</span>
               <span class="legend-item"><span class="legend-dot lodging"></span>Stay</span>
+              <span class="legend-item"><span class="legend-dot attraction"></span>Sight</span>
             </div>
           </div>
           <div class="panel elevation">
@@ -230,11 +240,9 @@
             <div class="section-title"><h3>Lodging choices</h3><span class="count" id="lodgingCount">3 near arrival</span></div>
             <div class="choice-list" id="lodgingChoices"><div class="loading-row">Finding three good options…</div></div>
           </section>
-          <section class="details" id="details" aria-live="polite">
-            <span class="source-badge" id="detailSource">Demo</span>
-            <h3 id="detailName">Select any recommendation</h3>
-            <p id="detailAddress">You do not need to book or choose anything yet.</p>
-            <div class="details-links" id="detailLinks"></div>
+          <section class="recommendation-section">
+            <div class="section-title"><h3>Sightseeing</h3><span class="count" id="attractionCount">Well-rated stops</span></div>
+            <div class="choice-list" id="attractionChoices"><div class="loading-row">Finding outstanding historic and natural sights…</div></div>
           </section>
         </aside>
       </div>
@@ -322,15 +330,33 @@
       positionNode: null,
       recommendations: new Map(),
       routePromises: new Map(),
-      selected: null
+      routeQueue: Promise.resolve(),
+      lastRouteRequestAt: 0,
+      selected: null,
+      citySelections: {
+        start: { id: "default-vienna", name: "Vienna", label: "Vienna, Austria", latitude: 48.2082, longitude: 16.3738 },
+        end: { id: "default-budapest", name: "Budapest", label: "Budapest, Hungary", latitude: 47.4979, longitude: 19.0402 }
+      },
+      tripGenerated: false,
+      tripEndpoints: null,
+      citySearchCache: new Map(),
+      citySessionTokens: { start: null, end: null }
     };
 
-    tripDays.forEach((day) => {
+    const defaultLodgingByDay = ["camping", "hostel", "guest_house", "hotel"];
+    tripDays.forEach((day, index) => {
+      day.demoRoute = day.route.map((point) => [...point]);
+      day.demoProfile = [...day.profile];
       day.startPoint = [...day.route[0]];
       day.endPoint = [...day.route[day.route.length - 1]];
       day.routeSource = "Demo";
       day.routeDistances = cumulativeRouteDistances(day.route);
+      day.lodgingPreference = defaultLodgingByDay[index] || "hostel";
     });
+    state.tripEndpoints = {
+      start: { ...state.citySelections.start },
+      end: { ...state.citySelections.end }
+    };
 
     const elements = {
       dayList: document.getElementById("dayList"),
@@ -338,19 +364,25 @@
       daySummary: document.getElementById("daySummary"),
       lunchChoices: document.getElementById("lunchChoices"),
       lodgingChoices: document.getElementById("lodgingChoices"),
+      attractionChoices: document.getElementById("attractionChoices"),
       lunchCount: document.getElementById("lunchCount"),
       lodgingCount: document.getElementById("lodgingCount"),
+      attractionCount: document.getElementById("attractionCount"),
+      tripTitle: document.getElementById("tripTitle"),
+      tripSubtitle: document.getElementById("tripSubtitle"),
+      startCity: document.getElementById("startCity"),
+      endCity: document.getElementById("endCity"),
+      startCitySuggestions: document.getElementById("startCitySuggestions"),
+      endCitySuggestions: document.getElementById("endCitySuggestions"),
+      dayCountHeading: document.getElementById("dayCountHeading"),
       liveStatus: document.getElementById("liveStatus"),
       routeWarning: document.getElementById("routeWarning"),
       mapFallback: document.getElementById("mapFallback"),
       mapFallbackCopy: document.getElementById("mapFallbackCopy"),
-      detailSource: document.getElementById("detailSource"),
-      detailName: document.getElementById("detailName"),
-      detailAddress: document.getElementById("detailAddress"),
-      detailLinks: document.getElementById("detailLinks"),
       elevationSvg: document.getElementById("elevationSvg"),
       profileReadout: document.getElementById("profileReadout"),
-      lodgingPreferences: document.getElementById("lodgingPreferences"),
+      lodgingPreference: document.getElementById("lodgingPreference"),
+      lodgingDayLabel: document.getElementById("lodgingDayLabel"),
       toast: document.getElementById("toast")
     };
 
@@ -367,14 +399,24 @@
           websiteUri: "", phone: "", googleMapsUri: "", source: "Demo"
         };
       }
+      const lodgingLabel = {
+        camping: "camping",
+        hostel: "hostel",
+        guest_house: "guest house",
+        hotel: "hotel"
+      }[day.lodgingPreference];
       return {
         lunch: day.lunch.map((item, index) => convert(item, index, "lunch", day.lunchPoint)),
-        lodging: day.lodging.map((item, index) => convert(item, index, "lodging", day.lodgingPoint))
+        lodging: day.lodging
+          .filter((item) => item[3].toLowerCase().startsWith(lodgingLabel))
+          .map((item, index) => convert(item, index, "lodging", day.lodgingPoint)),
+        attraction: []
       };
     }
 
     function renderDayButtons() {
       elements.dayList.innerHTML = "";
+      elements.dayCountHeading.textContent = tripDays.length === 1 ? "Your day" : `Your ${tripDays.length} days`;
       tripDays.forEach((day, index) => {
         const button = document.createElement("button");
         button.type = "button";
@@ -388,6 +430,7 @@
     async function selectDay(index) {
       state.dayIndex = index;
       state.selected = null;
+      syncLodgingControl();
       renderDayButtons();
       renderDayHeading();
       renderElevation();
@@ -400,7 +443,27 @@
       const day = tripDays[state.dayIndex];
       elements.dayTitle.textContent = day.title;
       elements.daySummary.textContent = `${day.distance} km · ${day.ascent} m ascent · about ${day.rideTime} riding`;
-      elements.routeWarning.hidden = day.routeSource !== "Google";
+      elements.routeWarning.hidden = day.routeSource !== "OpenStreetMap";
+      renderTripHeader();
+    }
+
+    function renderTripHeader() {
+      if (!state.tripGenerated) {
+        elements.tripTitle.textContent = "Plan your next European bike tour.";
+        elements.tripSubtitle.textContent = "Choose a starting city and destination to create a multi-day bicycle route.";
+        return;
+      }
+      const start = state.tripEndpoints.start;
+      const end = state.tripEndpoints.end;
+      const totalDistance = tripDays.reduce((sum, day) => sum + Number(day.distance || 0), 0);
+      const surfaceLabel = {
+        bike_paths: "bike paths first",
+        gravel: "gravel welcome",
+        quiet_roads: "quiet roads are OK"
+      }[selectedSurfacePreference()];
+      const dayLabel = tripDays.length === 1 ? "One flexible day" : `${tripDays.length} flexible days`;
+      elements.tripTitle.textContent = `${start.name} to ${end.name}, at touring pace.`;
+      elements.tripSubtitle.textContent = `${dayLabel} across Europe · ${totalDistance} km planned · ${surfaceLabel}`;
     }
 
     function renderFallbackThenLoad() {
@@ -419,20 +482,22 @@
       const day = tripDays[dayIndex];
       elements.liveStatus.textContent = "Finding live Places…";
       try {
-        const lodgingPreferences = selectedLodgingPreferences();
-        const [lunch, lodging] = await Promise.all([
+        const attractionAnchors = [.25, .5, .75].map((ratio) => interpolateRouteByDistance(day, ratio));
+        const [lunch, lodging, attraction] = await Promise.all([
           fetchPlaces("lunch", day.lunchPoint, 6500),
-          fetchPlaces("lodging", day.lodgingPoint, 5000, lodgingPreferences)
+          fetchPlaces("lodging", day.lodgingPoint, 5000, day.lodgingPreference),
+          fetchPlaces("attraction", day.lunchPoint, 7000, "", attractionAnchors)
         ]);
         if (dayIndex !== state.dayIndex) return;
         const recommendations = {
           lunch: liveOnly(lunch),
-          lodging: liveOnly(lodging)
+          lodging: liveOnly(lodging),
+          attraction: bestAttractions(attraction)
         };
         state.recommendations.set(dayIndex, recommendations);
         state.selected = null;
-        elements.liveStatus.textContent = day.routeSource === "Google"
-          ? "Live bicycle route and Google Places"
+        elements.liveStatus.textContent = day.routeSource === "OpenStreetMap"
+          ? "Live OSM bicycle route and Google Places"
           : "Live Google Places connected";
         renderRecommendations(recommendations);
         if (state.mapsReady) drawPoiMarkers(recommendations);
@@ -443,11 +508,35 @@
       }
     }
 
-    async function fetchPlaces(kind, point, radiusMeters, lodgingPreferences = []) {
+    async function loadLiveLodging(dayIndex) {
+      const day = tripDays[dayIndex];
+      try {
+        const lodging = await fetchPlaces("lodging", day.lodgingPoint, 5000, day.lodgingPreference);
+        if (dayIndex !== state.dayIndex) return;
+        const current = state.recommendations.get(dayIndex) || fallbackRecommendations(day);
+        const recommendations = { ...current, lodging: liveOnly(lodging) };
+        state.recommendations.set(dayIndex, recommendations);
+        state.selected = null;
+        renderRecommendations(recommendations);
+        if (state.mapsReady) drawPoiMarkers(recommendations);
+      } catch (error) {
+        console.warn("Lodging refresh failed", error);
+        toast("Lodging could not be refreshed just now.");
+      }
+    }
+
+    async function fetchPlaces(kind, point, radiusMeters, lodgingPreference = "", attractionAnchors = []) {
       const response = await fetch("/api/places", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind, latitude: point[0], longitude: point[1], radiusMeters, lodgingPreferences })
+        body: JSON.stringify({
+          kind,
+          latitude: point[0],
+          longitude: point[1],
+          radiusMeters,
+          lodgingPreference,
+          attractionAnchors: attractionAnchors.map((anchor) => ({ latitude: anchor[0], longitude: anchor[1] }))
+        })
       });
       if (!response.ok) throw new Error(`Places request failed with ${response.status}`);
       const data = await response.json();
@@ -459,22 +548,35 @@
       return usable.slice(0, 3);
     }
 
+    function bestAttractions(attractions) {
+      const unique = new Map();
+      attractions
+        .filter((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude))
+        .forEach((attraction) => unique.set(attraction.id || attraction.name, attraction));
+      return [...unique.values()]
+        .sort((left, right) => attractionScore(right) - attractionScore(left))
+        .slice(0, 3);
+    }
+
+    function attractionScore(place) {
+      return Number(place.rating || 0) * Math.log10(Number(place.userRatingCount || 0) + 10);
+    }
+
     function renderRecommendations(recommendations) {
       renderChoiceList(elements.lunchChoices, recommendations.lunch, "lunch");
       renderChoiceList(elements.lodgingChoices, recommendations.lodging, "lodging");
+      renderChoiceList(elements.attractionChoices, recommendations.attraction, "attraction");
       elements.lunchCount.textContent = `${recommendations.lunch.length} around midpoint`;
       elements.lodgingCount.textContent = `${recommendations.lodging.length} near arrival`;
-      const firstChoice = recommendations.lunch[0] || recommendations.lodging[0];
-      if (!state.selected && firstChoice) {
-        selectRecommendation(firstChoice, recommendations.lunch[0] ? "lunch" : "lodging", false);
-      }
+      elements.attractionCount.textContent = `${recommendations.attraction.length} standout sights`;
       if (state.mapsReady) drawPoiMarkers(recommendations);
     }
 
     function renderChoiceList(container, choices, kind) {
       container.innerHTML = "";
       if (!choices.length) {
-        container.innerHTML = `<div class="loading-row">No ${kind === "lunch" ? "restaurants" : "lodging"} matching these preferences were found nearby.</div>`;
+        const noun = kind === "lunch" ? "restaurants" : kind === "lodging" ? "lodging" : "highly rated sights";
+        container.innerHTML = `<div class="loading-row">No ${noun} matching these criteria were found nearby.</div>`;
         return;
       }
       choices.forEach((choice, index) => {
@@ -495,7 +597,7 @@
           : `<span class="phone-unavailable">Phone not listed</span>`;
         card.innerHTML = `
           <div class="choice-top">${name}<span class="choice-rating">★ ${Number(choice.rating || 0).toFixed(1)}</span></div>
-          <div class="choice-meta"><span>${escapeHtml(choice.type || choice.note || (kind === "lunch" ? "Restaurant" : "Lodging"))}</span><span>${reviews}</span><span class="source-badge">${escapeHtml(choice.source)}</span></div>
+          <div class="choice-meta"><span>${escapeHtml(choice.type || choice.note || (kind === "lunch" ? "Restaurant" : kind === "lodging" ? "Lodging" : "Sight"))}</span><span>${reviews}</span><span class="source-badge">${escapeHtml(choice.source)}</span></div>
           <div class="choice-actions">${websiteAction}${phoneAction}<button type="button" data-show-map>Show on map</button></div>`;
         card.querySelector("[data-show-map]").addEventListener("click", () => selectRecommendation(choice, kind, true));
         container.appendChild(card);
@@ -507,27 +609,298 @@
       const current = state.recommendations.get(state.dayIndex) || fallbackRecommendations(tripDays[state.dayIndex]);
       renderChoiceList(elements.lunchChoices, current.lunch, "lunch");
       renderChoiceList(elements.lodgingChoices, current.lodging, "lodging");
-      elements.detailSource.textContent = choice.source;
-      elements.detailName.textContent = choice.name;
-      elements.detailAddress.textContent = choice.address || choice.note || "Details available in the trip.";
-      const links = [];
-      if (choice.websiteUri) links.push(`<a href="${escapeAttribute(choice.websiteUri)}" target="_blank" rel="noopener noreferrer">Website ↗</a>`);
-      if (choice.phone) links.push(`<a href="tel:${escapeAttribute(phoneHref(choice.phone))}">${escapeHtml(choice.phone)}</a>`);
-      if (choice.googleMapsUri) links.push(`<a href="${escapeAttribute(choice.googleMapsUri)}" target="_blank" rel="noopener noreferrer">Open in Google Maps ↗</a>`);
-      elements.detailLinks.innerHTML = links.join("") || "<span class=\"subtle\">Live links appear after Google Places is connected.</span>";
+      renderChoiceList(elements.attractionChoices, current.attraction, "attraction");
       if (moveMap && state.mapsReady) {
         state.map.panTo({ lat: choice.latitude, lng: choice.longitude });
         state.map.setZoom(14);
       }
     }
 
-    function selectedLodgingPreferences() {
-      return [...elements.lodgingPreferences.querySelectorAll('input[type="checkbox"]:checked')]
-        .map((input) => input.value);
+    function syncLodgingControl() {
+      const day = tripDays[state.dayIndex];
+      elements.lodgingPreference.value = day.lodgingPreference;
+      elements.lodgingDayLabel.textContent = `Day ${state.dayIndex + 1} lodging`;
     }
 
     function selectedSurfacePreference() {
       return document.querySelector('input[name="surface"]:checked')?.value || "bike_paths";
+    }
+
+    function setupCityInput(kind, input, menu) {
+      let timer;
+      let searchSequence = 0;
+      input.addEventListener("input", () => {
+        const selected = state.citySelections[kind];
+        if (!selected || input.value.trim() !== selected.label) state.citySelections[kind] = null;
+        clearTimeout(timer);
+        const query = input.value.trim();
+        if (query.length < 2) {
+          hideCityOptions(input, menu);
+          return;
+        }
+        if (!state.citySessionTokens[kind]) state.citySessionTokens[kind] = crypto.randomUUID();
+        const sequence = ++searchSequence;
+        showCityMessage(input, menu, "Searching European cities…");
+        timer = setTimeout(async () => {
+          try {
+            const cities = await fetchCityOptions(query, state.citySessionTokens[kind]);
+            if (sequence === searchSequence && input.value.trim() === query) renderCityOptions(kind, input, menu, cities);
+          } catch (error) {
+            console.warn("City search failed", error);
+            if (sequence === searchSequence) showCityMessage(input, menu, "City suggestions are temporarily unavailable.");
+          }
+        }, 700);
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") hideCityOptions(input, menu);
+      });
+      input.addEventListener("blur", () => setTimeout(() => hideCityOptions(input, menu), 160));
+    }
+
+    async function fetchCityOptions(query, sessionToken) {
+      const cacheKey = `${sessionToken}:${query.toLocaleLowerCase("en")}`;
+      if (state.citySearchCache.has(cacheKey)) return state.citySearchCache.get(cacheKey);
+      const response = await fetch("/api/places", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "city", query, sessionToken })
+      });
+      if (!response.ok) throw new Error(`City search failed with ${response.status}`);
+      const data = await response.json();
+      const cities = (Array.isArray(data.cities) ? data.cities : [])
+        .filter((city) => city && typeof city.id === "string" && typeof city.label === "string");
+      state.citySearchCache.set(cacheKey, cities);
+      return cities;
+    }
+
+    function renderCityOptions(kind, input, menu, cities) {
+      menu.innerHTML = "";
+      if (!cities.length) {
+        showCityMessage(input, menu, "No matching European cities found.");
+        return;
+      }
+      cities.forEach((city) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "city-option";
+        option.setAttribute("role", "option");
+        option.innerHTML = `<strong>${escapeHtml(city.name)}</strong><small>${escapeHtml(city.label)}</small>`;
+        option.addEventListener("mousedown", (event) => event.preventDefault());
+        option.addEventListener("click", async () => {
+          const sessionToken = state.citySessionTokens[kind];
+          showCityMessage(input, menu, "Locating the selected city…");
+          try {
+            const resolvedCity = await fetchCityDetails(city.id, sessionToken);
+            state.citySelections[kind] = resolvedCity;
+            state.citySessionTokens[kind] = null;
+            input.value = resolvedCity.label;
+            hideCityOptions(input, menu);
+          } catch (error) {
+            console.warn("City details failed", error);
+            showCityMessage(input, menu, "That city could not be selected. Please try again.");
+          }
+        });
+        menu.appendChild(option);
+      });
+      menu.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+    }
+
+    async function fetchCityDetails(placeId, sessionToken) {
+      const response = await fetch("/api/places", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "city_details", placeId, sessionToken })
+      });
+      if (!response.ok) throw new Error(`City details failed with ${response.status}`);
+      const data = await response.json();
+      const city = data.city;
+      if (!city || !Number.isFinite(Number(city.latitude)) || !Number.isFinite(Number(city.longitude))) {
+        throw new Error("City details did not include coordinates");
+      }
+      return {
+        ...city,
+        latitude: Number(city.latitude),
+        longitude: Number(city.longitude)
+      };
+    }
+
+    function showCityMessage(input, menu, message) {
+      menu.innerHTML = `<div class="city-search-message">${escapeHtml(message)}</div>`;
+      menu.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+    }
+
+    function hideCityOptions(input, menu) {
+      menu.hidden = true;
+      input.setAttribute("aria-expanded", "false");
+    }
+
+    async function regenerateTrip() {
+      const start = state.citySelections.start;
+      const end = state.citySelections.end;
+      if (!start || !end) {
+        toast("Choose both cities from the suggestion lists before generating the trip.");
+        return;
+      }
+      if (!state.liveRouting) {
+        toast("Live bicycle routing is still connecting. Please try again in a moment.");
+        return;
+      }
+      if (haversineMeters([start.latitude, start.longitude], [end.latitude, end.longitude]) < 5000) {
+        toast("Choose two different cities at least 5 km apart.");
+        return;
+      }
+
+      const button = document.getElementById("regenerateButton");
+      button.disabled = true;
+      elements.liveStatus.textContent = "Planning the complete OSM bicycle route…";
+      try {
+        const response = await enqueueRouteRequest(() => fetch("/api/route", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            origin: { latitude: start.latitude, longitude: start.longitude },
+            destination: { latitude: end.latitude, longitude: end.longitude },
+            surfacePreference: selectedSurfacePreference(),
+            tripPlan: true
+          })
+        }));
+        if (!response.ok) {
+          const retryAfter = Number(response.headers.get("Retry-After") || 0);
+          const error = new Error(`Trip route request failed with ${response.status}`);
+          error.retryAfter = retryAfter;
+          throw error;
+        }
+        const routeData = await response.json();
+        buildTripFromRoute(start, end, routeData);
+        syncLodgingControl();
+        renderDayButtons();
+        renderDayHeading();
+        renderElevation();
+        if (state.mapsReady) drawMap();
+        await hydrateDay(0);
+        toast(`Created a ${tripDays.length}-day bicycle trip.`);
+      } catch (error) {
+        console.warn("Trip generation failed", error);
+        elements.liveStatus.textContent = "Live OSM bicycle route and Google Places";
+        toast(error.retryAfter
+          ? `Routing quota is busy. Try again in about ${error.retryAfter} seconds.`
+          : "A complete bicycle route could not be created for those cities.");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function buildTripFromRoute(start, end, routeData) {
+      const route = (Array.isArray(routeData.route) ? routeData.route : [])
+        .filter((point) => Array.isArray(point) && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])))
+        .map((point) => [
+          Number(point[0]),
+          Number(point[1]),
+          Number.isFinite(Number(point[2])) ? Number(point[2]) : null
+        ]);
+      if (route.length < 2) throw new Error("Trip route did not include usable geometry");
+      const distances = cumulativeRouteDistances(route);
+      const geometryMeters = distances[distances.length - 1];
+      const totalMeters = Number(routeData.distanceMeters || geometryMeters);
+      const maximumDailyKm = Number(document.getElementById("distanceRange").value || 75);
+      const requestedDays = Math.max(1, Math.ceil(totalMeters / 1000 / maximumDailyKm));
+      const dayCount = Math.min(requestedDays, route.length - 1);
+      const cutIndices = [0];
+      for (let dayIndex = 1; dayIndex < dayCount; dayIndex += 1) {
+        const target = geometryMeters * dayIndex / dayCount;
+        let index = distances.findIndex((distance) => distance >= target);
+        if (index < 0) index = route.length - 1;
+        cutIndices.push(Math.max(cutIndices[cutIndices.length - 1] + 1, index));
+      }
+      cutIndices.push(route.length - 1);
+
+      const totalDuration = Number(routeData.durationSeconds || 0);
+      const surfacePreference = selectedSurfacePreference();
+      const generatedDays = [];
+      for (let dayIndex = 0; dayIndex < dayCount; dayIndex += 1) {
+        const startIndex = cutIndices[dayIndex];
+        const endIndex = cutIndices[dayIndex + 1];
+        const segmentWithElevation = route.slice(startIndex, endIndex + 1);
+        const segmentRoute = segmentWithElevation.map((point) => [point[0], point[1]]);
+        const segmentMeters = distances[endIndex] - distances[startIndex];
+        const elevations = segmentWithElevation.map((point) => point[2]).filter(Number.isFinite);
+        const profile = elevations.length > 1 ? sampleValues(elevations, 256) : Array(32).fill(100);
+        const startLabel = dayIndex === 0 ? start.name : `Overnight stop ${dayIndex}`;
+        const endLabel = dayIndex === dayCount - 1 ? end.name : `Overnight stop ${dayIndex + 1}`;
+        const day = {
+          title: `${startLabel} → ${endLabel}`,
+          distance: Math.max(1, Math.round(segmentMeters / 1000)),
+          ascent: calculateProfileAscent(elevations),
+          rideTime: formatDuration(totalDuration * (segmentMeters / totalMeters)),
+          route: segmentRoute,
+          profile,
+          lunch: genericLunchChoices(dayIndex),
+          lodging: genericLodgingChoices(dayIndex),
+          startPoint: [...segmentRoute[0]],
+          endPoint: [...segmentRoute[segmentRoute.length - 1]],
+          demoRoute: segmentRoute.map((point) => [...point]),
+          demoProfile: [...profile],
+          routeSource: "OpenStreetMap",
+          routeSurface: surfacePreference,
+          routeDistances: cumulativeRouteDistances(segmentRoute),
+          lodgingPreference: defaultLodgingByDay[dayIndex % defaultLodgingByDay.length]
+        };
+        day.lunchPoint = interpolateRouteByDistance(day, .5);
+        day.lodgingPoint = [...segmentRoute[segmentRoute.length - 1]];
+        generatedDays.push(day);
+      }
+
+      tripDays.splice(0, tripDays.length, ...generatedDays);
+      state.tripEndpoints = { start: { ...start }, end: { ...end } };
+      state.tripGenerated = true;
+      state.dayIndex = 0;
+      state.selected = null;
+      state.recommendations.clear();
+      state.routePromises.clear();
+    }
+
+    function sampleValues(values, maximumCount) {
+      if (values.length <= maximumCount) return [...values];
+      return Array.from({ length: maximumCount }, (_, index) => {
+        const sourceIndex = Math.round(index * (values.length - 1) / (maximumCount - 1));
+        return values[sourceIndex];
+      });
+    }
+
+    function calculateProfileAscent(values) {
+      let ascent = 0;
+      for (let index = 1; index < values.length; index += 1) {
+        const gain = values[index] - values[index - 1];
+        if (gain > 1) ascent += gain;
+      }
+      return Math.max(0, Math.round(ascent));
+    }
+
+    function genericLunchChoices(dayIndex) {
+      return [
+        [`Day ${dayIndex + 1} midpoint café`, 4.7, 320, "Restaurant · near the route"],
+        [`Day ${dayIndex + 1} cyclist lunch`, 4.6, 210, "Café · quick service"],
+        [`Day ${dayIndex + 1} regional kitchen`, 4.5, 180, "Restaurant · local dishes"]
+      ];
+    }
+
+    function genericLodgingChoices(dayIndex) {
+      return [
+        [`Day ${dayIndex + 1} campground A`, 4.6, 180, "Camping · bicycle friendly"],
+        [`Day ${dayIndex + 1} campground B`, 4.5, 150, "Camping · showers"],
+        [`Day ${dayIndex + 1} campground C`, 4.4, 120, "Camping · quiet pitches"],
+        [`Day ${dayIndex + 1} hostel A`, 4.7, 310, "Hostel · secure bike room"],
+        [`Day ${dayIndex + 1} hostel B`, 4.6, 250, "Hostel · laundry"],
+        [`Day ${dayIndex + 1} hostel C`, 4.5, 190, "Hostel · central location"],
+        [`Day ${dayIndex + 1} guest house A`, 4.8, 280, "Guest house · breakfast"],
+        [`Day ${dayIndex + 1} guest house B`, 4.7, 220, "Guest house · bicycle storage"],
+        [`Day ${dayIndex + 1} guest house C`, 4.6, 170, "Guest house · quiet rooms"],
+        [`Day ${dayIndex + 1} hotel A`, 4.8, 440, "Hotel · bicycle storage"],
+        [`Day ${dayIndex + 1} hotel B`, 4.7, 360, "Hotel · breakfast"],
+        [`Day ${dayIndex + 1} hotel C`, 4.6, 290, "Hotel · central location"]
+      ];
     }
 
     async function hydrateDay(dayIndex) {
@@ -538,33 +911,44 @@
       renderElevation();
       if (state.mapsReady) drawMap();
       if (state.livePlaces) await loadLiveRecommendations(dayIndex);
-      else if (tripDays[dayIndex].routeSource === "Google") elements.liveStatus.textContent = "Live bicycle route · demo recommendations";
+      else if (tripDays[dayIndex].routeSource === "OpenStreetMap") elements.liveStatus.textContent = "Live OSM bicycle route · demo recommendations";
     }
 
     async function loadLiveRoute(dayIndex) {
       const day = tripDays[dayIndex];
-      if (day.routeSource === "Google") return;
-      if (state.routePromises.has(dayIndex)) return state.routePromises.get(dayIndex);
+      const requestedSurface = selectedSurfacePreference();
+      const promiseKey = `${dayIndex}:${requestedSurface}`;
+      if (day.routeSource === "OpenStreetMap" && day.routeSurface === requestedSurface) return;
+      if (state.routePromises.has(promiseKey)) return state.routePromises.get(promiseKey);
 
       const routePromise = (async () => {
         if (dayIndex === state.dayIndex) elements.liveStatus.textContent = "Loading detailed bicycle route…";
-        const response = await fetch("/api/route", {
+        const response = await enqueueRouteRequest(() => fetch("/api/route", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             origin: { latitude: day.startPoint[0], longitude: day.startPoint[1] },
             destination: { latitude: day.endPoint[0], longitude: day.endPoint[1] },
-            surfacePreference: selectedSurfacePreference()
+            surfacePreference: requestedSurface
           })
-        });
-        if (!response.ok) throw new Error(`Route request failed with ${response.status}`);
+        }));
+        if (!response.ok) {
+          const retryAfter = Number(response.headers.get("Retry-After") || 0);
+          const error = new Error(`Route request failed with ${response.status}`);
+          error.retryAfter = retryAfter;
+          throw error;
+        }
         const routeData = await response.json();
-        const route = decodePolyline(routeData.encodedPolyline || "");
+        if (requestedSurface !== selectedSurfacePreference()) return;
+        const route = Array.isArray(routeData.route)
+          ? routeData.route.filter((point) => Array.isArray(point) && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])))
+          : [];
         if (route.length < 2) throw new Error("Route response did not include a usable path");
 
-        day.route = route;
+        day.route = route.map((point) => [Number(point[0]), Number(point[1])]);
         day.routeDistances = cumulativeRouteDistances(route);
-        day.routeSource = "Google";
+        day.routeSource = "OpenStreetMap";
+        day.routeSurface = requestedSurface;
         day.distance = Math.max(1, Math.round(Number(routeData.distanceMeters || 0) / 1000));
         day.rideTime = formatDuration(Number(routeData.durationSeconds || 0));
         day.lunchPoint = interpolateRouteByDistance(day, .5);
@@ -578,50 +962,31 @@
         console.warn("Detailed bicycle route request failed", error);
         if (dayIndex === state.dayIndex) {
           elements.liveStatus.textContent = state.livePlaces ? "Live Places · demo route" : "Demo route";
-          toast("The detailed bicycle route is waiting for the Google Routes and Elevation APIs.");
+          toast(error.retryAfter
+            ? `Routing quota is busy. Try again in about ${error.retryAfter} seconds.`
+            : "The OpenStreetMap bicycle route is temporarily unavailable.");
         }
       }).finally(() => {
-        state.routePromises.delete(dayIndex);
+        state.routePromises.delete(promiseKey);
       });
 
-      state.routePromises.set(dayIndex, routePromise);
+      state.routePromises.set(promiseKey, routePromise);
       return routePromise;
     }
 
-    function decodePolyline(encoded) {
-      const points = [];
-      let index = 0;
-      let latitude = 0;
-      let longitude = 0;
-      while (index < encoded.length) {
-        const latitudeResult = decodePolylineValue(encoded, index);
-        if (!latitudeResult) break;
-        index = latitudeResult.index;
-        latitude += latitudeResult.value;
-        const longitudeResult = decodePolylineValue(encoded, index);
-        if (!longitudeResult) break;
-        index = longitudeResult.index;
-        longitude += longitudeResult.value;
-        points.push([latitude / 1e5, longitude / 1e5]);
-      }
-      return points;
+    function enqueueRouteRequest(requestFactory) {
+      const queued = state.routeQueue.catch(() => {}).then(async () => {
+        const waitMs = Math.max(0, 2000 - (Date.now() - state.lastRouteRequestAt));
+        if (waitMs) await delay(waitMs);
+        state.lastRouteRequestAt = Date.now();
+        return requestFactory();
+      });
+      state.routeQueue = queued.catch(() => {});
+      return queued;
     }
 
-    function decodePolylineValue(encoded, startIndex) {
-      let result = 0;
-      let shift = 0;
-      let index = startIndex;
-      while (index < encoded.length) {
-        const byte = encoded.charCodeAt(index++) - 63;
-        if (byte < 0) return null;
-        result |= (byte & 0x1f) << shift;
-        if (byte < 0x20) {
-          return { index, value: (result & 1) ? ~(result >> 1) : (result >> 1) };
-        }
-        shift += 5;
-        if (shift > 30) return null;
-      }
-      return null;
+    function delay(milliseconds) {
+      return new Promise((resolve) => setTimeout(resolve, milliseconds));
     }
 
     function cumulativeRouteDistances(route) {
@@ -747,7 +1112,8 @@
       state.markers = [];
       [
         ...recommendations.lunch.map((place) => ({ place, kind: "lunch" })),
-        ...recommendations.lodging.map((place) => ({ place, kind: "lodging" }))
+        ...recommendations.lodging.map((place) => ({ place, kind: "lodging" })),
+        ...recommendations.attraction.map((place) => ({ place, kind: "attraction" }))
       ].forEach(({ place, kind }, index) => {
         if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) return;
         const marker = new google.maps.marker.AdvancedMarkerElement({
@@ -832,14 +1198,22 @@
     function downloadGpx() {
       const day = tripDays[state.dayIndex];
       const track = day.route.map((point) => `<trkpt lat="${point[0]}" lon="${point[1]}"></trkpt>`).join("");
-      const xml = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="VeloPlan Europe"><trk><name>Day ${state.dayIndex + 1}: ${escapeXml(day.title)}</name><trkseg>${track}</trkseg></trk></gpx>`;
+      const recommendations = state.recommendations.get(state.dayIndex) || fallbackRecommendations(day);
+      const waypoints = [
+        ...recommendations.lunch.map((place) => ({ place, type: "Lunch" })),
+        ...recommendations.lodging.map((place) => ({ place, type: "Lodging" })),
+        ...recommendations.attraction.map((place) => ({ place, type: "Sightseeing" }))
+      ].filter(({ place }) => Number.isFinite(place.latitude) && Number.isFinite(place.longitude))
+        .map(({ place, type }) => `<wpt lat="${place.latitude}" lon="${place.longitude}"><name>${escapeXml(place.name)}</name><type>${type}</type></wpt>`)
+        .join("");
+      const xml = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Europe Bike Tour Planner">${waypoints}<trk><name>Day ${state.dayIndex + 1}: ${escapeXml(day.title)}</name><trkseg>${track}</trkseg></trk></gpx>`;
       const blob = new Blob([xml], { type: "application/gpx+xml" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = `veloplan-day-${state.dayIndex + 1}.gpx`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 500);
-      toast("Route GPX downloaded. Recommendation details stay in the app.");
+      toast("Route GPX downloaded with named recommendation waypoints.");
     }
 
     function toLatLng(point) { return { lat: point[0], lng: point[1] }; }
@@ -853,24 +1227,34 @@
     function toast(message) { elements.toast.textContent = message; elements.toast.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => elements.toast.classList.remove("show"), 2600); }
 
     document.getElementById("distanceRange").addEventListener("input", (event) => { document.getElementById("distanceValue").textContent = `45–${event.target.value} km`; });
-    document.getElementById("regenerateButton").addEventListener("click", () => toast("Route regenerated with your current preferences."));
-    elements.lodgingPreferences.addEventListener("change", async (event) => {
-      if (!selectedLodgingPreferences().length) {
-        event.target.checked = true;
-        toast("Keep at least one lodging preference selected.");
-        return;
-      }
-      state.recommendations.clear();
+    document.getElementById("regenerateButton").addEventListener("click", regenerateTrip);
+    elements.lodgingPreference.addEventListener("change", async (event) => {
+      const day = tripDays[state.dayIndex];
+      day.lodgingPreference = event.target.value;
       state.selected = null;
-      elements.lodgingChoices.innerHTML = '<div class="loading-row">Finding lodging that matches your selections…</div>';
-      if (state.livePlaces) await loadLiveRecommendations(state.dayIndex);
+      elements.lodgingChoices.innerHTML = '<div class="loading-row">Finding lodging that matches this day’s selection…</div>';
+      if (state.livePlaces) await loadLiveLodging(state.dayIndex);
+      else renderRecommendations(fallbackRecommendations(day));
     });
+    document.querySelectorAll('input[name="surface"]').forEach((input) => input.addEventListener("change", async () => {
+      const day = tripDays[state.dayIndex];
+      day.route = day.demoRoute.map((point) => [...point]);
+      day.profile = [...day.demoProfile];
+      day.routeDistances = cumulativeRouteDistances(day.route);
+      day.routeSource = "Demo";
+      day.routeSurface = "";
+      state.recommendations.delete(state.dayIndex);
+      await hydrateDay(state.dayIndex);
+    }));
     document.getElementById("gpxButton").addEventListener("click", downloadGpx);
     document.getElementById("shareButton").addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(location.href); toast("Trip link copied."); }
       catch { toast("Copy the address from your browser to share this trip."); }
     });
 
+    setupCityInput("start", elements.startCity, elements.startCitySuggestions);
+    setupCityInput("end", elements.endCity, elements.endCitySuggestions);
+    syncLodgingControl();
     renderDayButtons();
     renderDayHeading();
     renderElevation();

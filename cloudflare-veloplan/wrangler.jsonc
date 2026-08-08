@@ -13,7 +13,8 @@
   "secrets": {
     "required": [
       "GOOGLE_MAPS_BROWSER_KEY",
-      "GOOGLE_PLACES_SERVER_KEY"
+      "GOOGLE_PLACES_SERVER_KEY",
+      "OPENROUTESERVICE_API_KEY"
     ]
   },
   "observability": {
