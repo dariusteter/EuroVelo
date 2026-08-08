@@ -38,12 +38,21 @@ assert(invalidResponse.status === 400, "invalid Places search kinds should be re
 
 const originalFetch = globalThis.fetch;
 const placesRequestBodies = [];
+let citySearchRequestBody;
 let routeRequestBody;
 let routeAuthorization;
 let routeRateLimited = false;
 globalThis.fetch = async (input, init = {}) => {
   const url = String(input);
-  if (url.includes("places.googleapis.com")) {
+  if (url.includes("places.googleapis.com/v1/places:searchText")) {
+    citySearchRequestBody = JSON.parse(init.body);
+    return Response.json({ places: [
+      googleCity("Vienna", "Vienna, Austria", 48.2082, 16.3738),
+      googleCity("Vienne", "Vienne, France", 45.5256, 4.8743),
+      googleCity("Vienna", "Vienna, Georgia, USA", 32.0916, -83.7957)
+    ] });
+  }
+  if (url.includes("places.googleapis.com/v1/places:searchNearby")) {
     const requestBody = JSON.parse(init.body);
     placesRequestBodies.push(requestBody);
     if (requestBody.includedPrimaryTypes.includes("tourist_attraction")) {
@@ -83,6 +92,19 @@ globalThis.fetch = async (input, init = {}) => {
 };
 
 try {
+  const cityResponse = await worker.fetch(new Request("https://planner.example.test/api/places", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Origin": "https://planner.example.test" },
+    body: JSON.stringify({ kind: "city", query: "Vienna" })
+  }), env);
+  const cityData = await cityResponse.json();
+  assert(cityResponse.status === 200, "city lookup should return 200");
+  assert(citySearchRequestBody.includedType === "locality", "city lookup should request localities only");
+  assert(citySearchRequestBody.strictTypeFiltering === true, "city lookup should strictly filter localities");
+  assert(citySearchRequestBody.locationRestriction.rectangle.low.latitude === 34, "city lookup should be restricted to Europe");
+  assert(cityData.cities.length === 2, "non-European city matches should be removed");
+  assert(cityData.cities[0].label === "Vienna, Austria", "city choices should include an unambiguous label");
+
   const lodgingResponse = await worker.fetch(new Request("https://planner.example.test/api/places", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Origin": "https://planner.example.test" },
@@ -168,6 +190,15 @@ function googlePlace(name, primaryType, phone, websiteUri, rating = 4.7, userRat
     primaryType,
     primaryTypeDisplayName: { text: primaryType },
     businessStatus: "OPERATIONAL"
+  };
+}
+
+function googleCity(name, formattedAddress, latitude, longitude) {
+  return {
+    id: `${name}-${latitude}-${longitude}`,
+    displayName: { text: name },
+    formattedAddress,
+    location: { latitude, longitude }
   };
 }
 
