@@ -159,8 +159,8 @@
     <main class="main">
       <section class="trip-header">
         <div>
-          <h1 id="tripTitle">Vienna to Budapest, at touring pace.</h1>
-          <p class="subtle" id="tripSubtitle">Four flexible days along the Danube · 284 km · bike paths first</p>
+          <h1 id="tripTitle">Plan your next European bike tour.</h1>
+          <p class="subtle" id="tripSubtitle">Choose a starting city and destination to create a multi-day bicycle route.</p>
         </div>
         <div class="status-pill"><span class="status-dot"></span><span id="liveStatus">Loading map service…</span></div>
       </section>
@@ -337,8 +337,10 @@
         start: { id: "default-vienna", name: "Vienna", label: "Vienna, Austria", latitude: 48.2082, longitude: 16.3738 },
         end: { id: "default-budapest", name: "Budapest", label: "Budapest, Hungary", latitude: 47.4979, longitude: 19.0402 }
       },
+      tripGenerated: false,
       tripEndpoints: null,
-      citySearchCache: new Map()
+      citySearchCache: new Map(),
+      citySessionTokens: { start: null, end: null }
     };
 
     const defaultLodgingByDay = ["camping", "hostel", "guest_house", "hotel"];
@@ -446,6 +448,11 @@
     }
 
     function renderTripHeader() {
+      if (!state.tripGenerated) {
+        elements.tripTitle.textContent = "Plan your next European bike tour.";
+        elements.tripSubtitle.textContent = "Choose a starting city and destination to create a multi-day bicycle route.";
+        return;
+      }
       const start = state.tripEndpoints.start;
       const end = state.tripEndpoints.end;
       const totalDistance = tripDays.reduce((sum, day) => sum + Number(day.distance || 0), 0);
@@ -631,11 +638,12 @@
           hideCityOptions(input, menu);
           return;
         }
+        if (!state.citySessionTokens[kind]) state.citySessionTokens[kind] = crypto.randomUUID();
         const sequence = ++searchSequence;
         showCityMessage(input, menu, "Searching European cities…");
         timer = setTimeout(async () => {
           try {
-            const cities = await fetchCityOptions(query);
+            const cities = await fetchCityOptions(query, state.citySessionTokens[kind]);
             if (sequence === searchSequence && input.value.trim() === query) renderCityOptions(kind, input, menu, cities);
           } catch (error) {
             console.warn("City search failed", error);
@@ -649,22 +657,18 @@
       input.addEventListener("blur", () => setTimeout(() => hideCityOptions(input, menu), 160));
     }
 
-    async function fetchCityOptions(query) {
-      const cacheKey = query.toLocaleLowerCase("en");
+    async function fetchCityOptions(query, sessionToken) {
+      const cacheKey = `${sessionToken}:${query.toLocaleLowerCase("en")}`;
       if (state.citySearchCache.has(cacheKey)) return state.citySearchCache.get(cacheKey);
       const response = await fetch("/api/places", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "city", query })
+        body: JSON.stringify({ kind: "city", query, sessionToken })
       });
       if (!response.ok) throw new Error(`City search failed with ${response.status}`);
       const data = await response.json();
-      const cities = (Array.isArray(data.cities) ? data.cities : []).filter((city) => (
-        city
-        && typeof city.label === "string"
-        && Number.isFinite(Number(city.latitude))
-        && Number.isFinite(Number(city.longitude))
-      ));
+      const cities = (Array.isArray(data.cities) ? data.cities : [])
+        .filter((city) => city && typeof city.id === "string" && typeof city.label === "string");
       state.citySearchCache.set(cacheKey, cities);
       return cities;
     }
@@ -682,19 +686,43 @@
         option.setAttribute("role", "option");
         option.innerHTML = `<strong>${escapeHtml(city.name)}</strong><small>${escapeHtml(city.label)}</small>`;
         option.addEventListener("mousedown", (event) => event.preventDefault());
-        option.addEventListener("click", () => {
-          state.citySelections[kind] = {
-            ...city,
-            latitude: Number(city.latitude),
-            longitude: Number(city.longitude)
-          };
-          input.value = city.label;
-          hideCityOptions(input, menu);
+        option.addEventListener("click", async () => {
+          const sessionToken = state.citySessionTokens[kind];
+          showCityMessage(input, menu, "Locating the selected city…");
+          try {
+            const resolvedCity = await fetchCityDetails(city.id, sessionToken);
+            state.citySelections[kind] = resolvedCity;
+            state.citySessionTokens[kind] = null;
+            input.value = resolvedCity.label;
+            hideCityOptions(input, menu);
+          } catch (error) {
+            console.warn("City details failed", error);
+            showCityMessage(input, menu, "That city could not be selected. Please try again.");
+          }
         });
         menu.appendChild(option);
       });
       menu.hidden = false;
       input.setAttribute("aria-expanded", "true");
+    }
+
+    async function fetchCityDetails(placeId, sessionToken) {
+      const response = await fetch("/api/places", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "city_details", placeId, sessionToken })
+      });
+      if (!response.ok) throw new Error(`City details failed with ${response.status}`);
+      const data = await response.json();
+      const city = data.city;
+      if (!city || !Number.isFinite(Number(city.latitude)) || !Number.isFinite(Number(city.longitude))) {
+        throw new Error("City details did not include coordinates");
+      }
+      return {
+        ...city,
+        latitude: Number(city.latitude),
+        longitude: Number(city.longitude)
+      };
     }
 
     function showCityMessage(input, menu, message) {
@@ -826,6 +854,7 @@
 
       tripDays.splice(0, tripDays.length, ...generatedDays);
       state.tripEndpoints = { start: { ...start }, end: { ...end } };
+      state.tripGenerated = true;
       state.dayIndex = 0;
       state.selected = null;
       state.recommendations.clear();

@@ -10,9 +10,12 @@ if (!html.includes('id="lunchChoices"')) throw new Error("Lunch choices are miss
 if (!html.includes('id="lodgingChoices"')) throw new Error("Lodging choices are missing");
 if (!html.includes('id="attractionChoices"')) throw new Error("Sightseeing choices are missing");
 if (!html.includes('<title>Europe Bike Tour Planner</title>')) throw new Error("App header is missing");
+if (!html.includes('Plan your next European bike tour.')) throw new Error("Neutral initial trip title is missing");
+if (!html.includes('state.tripGenerated = true')) throw new Error("Generated trip title state is missing");
 if (!html.includes('id="startCity" type="text"')) throw new Error("Editable starting city is missing");
 if (!html.includes('id="endCity" type="text"')) throw new Error("Editable destination city is missing");
 if (!html.includes('kind: "city"')) throw new Error("European city lookup is missing");
+if (!html.includes('kind: "city_details"')) throw new Error("Selected city resolution is missing");
 if (!html.includes('tripPlan: true')) throw new Error("Multi-day city route planning is missing");
 if (html.includes('id="detailHeading"') || html.includes('Lunch details')) throw new Error("Redundant recommendation details panel is still present");
 if (!html.includes('fetch("/api/route"')) throw new Error("Detailed route loading is missing");

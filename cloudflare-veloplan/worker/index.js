@@ -1,8 +1,9 @@
 const GOOGLE_NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby";
-const GOOGLE_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
+const GOOGLE_AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete";
+const GOOGLE_PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places";
 const OPENROUTESERVICE_DIRECTIONS_URL = "https://api.heigit.org/openrouteservice/v2/directions";
 const MAX_BODY_BYTES = 2048;
-const ALLOWED_KINDS = new Set(["lunch", "lodging", "attraction", "city"]);
+const ALLOWED_KINDS = new Set(["lunch", "lodging", "attraction", "city", "city_details"]);
 const ALLOWED_SURFACE_PREFERENCES = new Set(["bike_paths", "gravel", "quiet_roads"]);
 const LODGING_PRIMARY_TYPES = Object.freeze({
   camping: ["campground", "camping_cabin", "rv_park"],
@@ -114,9 +115,12 @@ async function handlePlaces(request, env, ctx) {
     return json({ error: validation.error }, 400);
   }
 
-  const { kind, latitude, longitude, radiusMeters, lodgingPreference, attractionAnchors, query } = validation.value;
+  const { kind, latitude, longitude, radiusMeters, lodgingPreference, attractionAnchors, query, placeId, sessionToken } = validation.value;
   if (kind === "city") {
-    return await handleCitySearch(request, env, ctx, query);
+    return await handleCitySearch(env, query, sessionToken);
+  }
+  if (kind === "city_details") {
+    return await handleCityDetails(env, placeId, sessionToken);
   }
   const includedPrimaryTypes = kind === "lunch"
     ? ["restaurant", "cafe"]
@@ -170,32 +174,24 @@ async function handlePlaces(request, env, ctx) {
   return json({ places }, 200, { "Cache-Control": "no-store" });
 }
 
-async function handleCitySearch(request, env, ctx, query) {
-  const cache = typeof caches === "undefined" ? null : caches.default;
-  const cacheUrl = new URL("/__city-cache", request.url);
-  cacheUrl.searchParams.set("q", query.toLocaleLowerCase("en"));
-  const cacheKey = new Request(cacheUrl, { method: "GET" });
-  const cachedResponse = cache ? await cache.match(cacheKey) : null;
-  if (cachedResponse) {
-    return cloneWithHeaders(cachedResponse, {
-      "Cache-Control": "private, max-age=300",
-      "X-City-Cache": "HIT"
-    });
-  }
-
-  const googleResponse = await fetch(GOOGLE_TEXT_SEARCH_URL, {
+async function handleCitySearch(env, query, sessionToken) {
+  const googleResponse = await fetch(GOOGLE_AUTOCOMPLETE_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": env.GOOGLE_PLACES_SERVER_KEY,
-      "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location"
+      "X-Goog-FieldMask": [
+        "suggestions.placePrediction.placeId",
+        "suggestions.placePrediction.text.text",
+        "suggestions.placePrediction.structuredFormat.mainText.text",
+        "suggestions.placePrediction.structuredFormat.secondaryText.text"
+      ].join(",")
     },
     body: JSON.stringify({
-      textQuery: query,
-      includedType: "locality",
-      strictTypeFiltering: true,
-      pageSize: 10,
+      input: query,
+      includedPrimaryTypes: ["(cities)"],
       languageCode: "en",
+      sessionToken,
       locationRestriction: {
         rectangle: {
           low: { latitude: 34, longitude: -25 },
@@ -214,29 +210,45 @@ async function handleCitySearch(request, env, ctx, query) {
   }
 
   const data = await googleResponse.json();
-  const cities = (Array.isArray(data.places) ? data.places : [])
-    .filter((place) => validateEuropePoint(place.location))
-    .slice(0, 10)
-    .map((place) => ({
-      id: String(place.id || ""),
+  const cities = (Array.isArray(data.suggestions) ? data.suggestions : [])
+    .map((suggestion) => suggestion.placePrediction)
+    .filter((prediction) => prediction?.placeId && prediction?.text?.text)
+    .map((prediction) => ({
+      id: String(prediction.placeId),
+      name: String(prediction.structuredFormat?.mainText?.text || prediction.text.text),
+      label: String(prediction.text.text)
+    }));
+  return json({ cities }, 200, { "Cache-Control": "no-store" });
+}
+
+async function handleCityDetails(env, placeId, sessionToken) {
+  const url = new URL(`${GOOGLE_PLACE_DETAILS_URL}/${encodeURIComponent(placeId)}`);
+  url.searchParams.set("sessionToken", sessionToken);
+  const googleResponse = await fetch(url, {
+    headers: {
+      "X-Goog-Api-Key": env.GOOGLE_PLACES_SERVER_KEY,
+      "X-Goog-FieldMask": "id,displayName,formattedAddress,location"
+    }
+  });
+  if (!googleResponse.ok) {
+    console.error(JSON.stringify({
+      event: "google_city_details_error",
+      status: googleResponse.status
+    }));
+    return json({ error: "That city could not be resolved." }, 502);
+  }
+  const place = await googleResponse.json();
+  const point = validateEuropePoint(place.location);
+  if (!point) return json({ error: "Select a city within Europe." }, 400);
+  return json({
+    city: {
+      id: String(place.id || placeId),
       name: String(place.displayName?.text || place.formattedAddress || "Unknown city"),
       label: String(place.formattedAddress || place.displayName?.text || "Unknown city"),
-      latitude: Number(place.location.latitude),
-      longitude: Number(place.location.longitude)
-    }));
-  const payload = { cities };
-  const response = json(payload, 200, {
-    "Cache-Control": "private, max-age=300",
-    "X-City-Cache": "MISS"
-  });
-  if (cache) {
-    const cacheWrite = cache.put(cacheKey, json(payload, 200, {
-      "Cache-Control": "public, max-age=86400"
-    }));
-    if (ctx) ctx.waitUntil(cacheWrite);
-    else await cacheWrite;
-  }
-  return response;
+      latitude: point.latitude,
+      longitude: point.longitude
+    }
+  }, 200, { "Cache-Control": "no-store" });
 }
 
 async function handleRoute(request, env, ctx) {
@@ -474,6 +486,8 @@ function validateSearch(input) {
 
   const kind = String(input.kind || "");
   const query = String(input.query || "").trim();
+  const placeId = String(input.placeId || "").trim();
+  const sessionToken = String(input.sessionToken || "").trim();
   const latitude = Number(input.latitude);
   const longitude = Number(input.longitude);
   const requestedRadius = Number(input.radiusMeters || 5000);
@@ -486,13 +500,25 @@ function validateSearch(input) {
     : [{ latitude, longitude }];
 
   if (!ALLOWED_KINDS.has(kind)) {
-    return { ok: false, error: "kind must be lunch, lodging, attraction, or city." };
+    return { ok: false, error: "The Places request kind is invalid." };
   }
   if (kind === "city") {
     if (query.length < 2 || query.length > 80) {
       return { ok: false, error: "City searches must contain between 2 and 80 characters." };
     }
-    return { ok: true, value: { kind, query } };
+    if (sessionToken.length < 8 || sessionToken.length > 100) {
+      return { ok: false, error: "City searches require a valid session token." };
+    }
+    return { ok: true, value: { kind, query, sessionToken } };
+  }
+  if (kind === "city_details") {
+    if (!/^[A-Za-z0-9_-]{8,300}$/.test(placeId)) {
+      return { ok: false, error: "The selected city identifier is invalid." };
+    }
+    if (sessionToken.length < 8 || sessionToken.length > 100) {
+      return { ok: false, error: "City details require a valid session token." };
+    }
+    return { ok: true, value: { kind, placeId, sessionToken } };
   }
   if (!Number.isFinite(latitude) || latitude < 34 || latitude > 72) {
     return { ok: false, error: "latitude must be within Europe." };

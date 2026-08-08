@@ -5,7 +5,7 @@ This project is the secure, full-stack version of the bicycle trip planner demo.
 ## What changed
 
 - Three lunch, lodging, and sightseeing recommendations for every day when enough highly rated results exist.
-- Editable start and destination fields search European localities and show distinct choices when cities share a name.
+- Editable start and destination fields use Google’s city-specific autocomplete and show distinct choices when cities share a name.
 - A complete OSM bicycle route is divided into daily stages using the selected maximum daily distance.
 - Detailed cross-border bicycle routes calculated by openrouteservice from OpenStreetMap data.
 - A live Google map with pan, zoom, detailed route geometry, and color-coded recommendation markers.

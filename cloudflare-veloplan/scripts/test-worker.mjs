@@ -39,18 +39,28 @@ assert(invalidResponse.status === 400, "invalid Places search kinds should be re
 const originalFetch = globalThis.fetch;
 const placesRequestBodies = [];
 let citySearchRequestBody;
+let cityDetailsUrl;
 let routeRequestBody;
 let routeAuthorization;
 let routeRateLimited = false;
 globalThis.fetch = async (input, init = {}) => {
   const url = String(input);
-  if (url.includes("places.googleapis.com/v1/places:searchText")) {
+  if (url.includes("places.googleapis.com/v1/places:autocomplete")) {
     citySearchRequestBody = JSON.parse(init.body);
-    return Response.json({ places: [
-      googleCity("Vienna", "Vienna, Austria", 48.2082, 16.3738),
-      googleCity("Vienne", "Vienne, France", 45.5256, 4.8743),
-      googleCity("Vienna", "Vienna, Georgia, USA", 32.0916, -83.7957)
+    return Response.json({ suggestions: [
+      googleCityPrediction("city-vienna-austria", "Vienna", "Vienna, Austria"),
+      googleCityPrediction("city-vienne-france", "Vienne", "Vienne, France"),
+      googleCityPrediction("city-vienna-georgia", "Vienna", "Vienna, Georgia, USA")
     ] });
+  }
+  if (url.includes("places.googleapis.com/v1/places/city-vienna-austria")) {
+    cityDetailsUrl = url;
+    return Response.json({
+      id: "city-vienna-austria",
+      displayName: { text: "Vienna" },
+      formattedAddress: "Vienna, Austria",
+      location: { latitude: 48.2082, longitude: 16.3738 }
+    });
   }
   if (url.includes("places.googleapis.com/v1/places:searchNearby")) {
     const requestBody = JSON.parse(init.body);
@@ -95,15 +105,25 @@ try {
   const cityResponse = await worker.fetch(new Request("https://planner.example.test/api/places", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Origin": "https://planner.example.test" },
-    body: JSON.stringify({ kind: "city", query: "Vienna" })
+    body: JSON.stringify({ kind: "city", query: "Vienna", sessionToken: "city-session-1234" })
   }), env);
   const cityData = await cityResponse.json();
   assert(cityResponse.status === 200, "city lookup should return 200");
-  assert(citySearchRequestBody.includedType === "locality", "city lookup should request localities only");
-  assert(citySearchRequestBody.strictTypeFiltering === true, "city lookup should strictly filter localities");
+  assert(citySearchRequestBody.includedPrimaryTypes.length === 1 && citySearchRequestBody.includedPrimaryTypes[0] === "(cities)", "city lookup should use Google's city collection");
   assert(citySearchRequestBody.locationRestriction.rectangle.low.latitude === 34, "city lookup should be restricted to Europe");
-  assert(cityData.cities.length === 2, "non-European city matches should be removed");
+  assert(citySearchRequestBody.sessionToken === "city-session-1234", "city lookup should preserve its billing session token");
+  assert(cityData.cities.length === 3, "ambiguous city names should return distinct choices");
   assert(cityData.cities[0].label === "Vienna, Austria", "city choices should include an unambiguous label");
+
+  const cityDetailsResponse = await worker.fetch(new Request("https://planner.example.test/api/places", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Origin": "https://planner.example.test" },
+    body: JSON.stringify({ kind: "city_details", placeId: "city-vienna-austria", sessionToken: "city-session-1234" })
+  }), env);
+  const cityDetailsData = await cityDetailsResponse.json();
+  assert(cityDetailsResponse.status === 200, "selected city details should return 200");
+  assert(cityDetailsUrl.includes("sessionToken=city-session-1234"), "city detail lookup should complete the autocomplete session");
+  assert(cityDetailsData.city.latitude === 48.2082, "selected city should include routing coordinates");
 
   const lodgingResponse = await worker.fetch(new Request("https://planner.example.test/api/places", {
     method: "POST",
@@ -193,12 +213,16 @@ function googlePlace(name, primaryType, phone, websiteUri, rating = 4.7, userRat
   };
 }
 
-function googleCity(name, formattedAddress, latitude, longitude) {
+function googleCityPrediction(placeId, name, label) {
   return {
-    id: `${name}-${latitude}-${longitude}`,
-    displayName: { text: name },
-    formattedAddress,
-    location: { latitude, longitude }
+    placePrediction: {
+      placeId,
+      text: { text: label },
+      structuredFormat: {
+        mainText: { text: name },
+        secondaryText: { text: label.replace(`${name}, `, "") }
+      }
+    }
   };
 }
 
