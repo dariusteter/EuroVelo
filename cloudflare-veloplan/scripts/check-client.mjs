@@ -22,6 +22,9 @@ if (!html.includes('fetch("/api/route"')) throw new Error("Detailed route loadin
 if (!html.includes('value="guest_house"')) throw new Error("Lodging preference values are missing");
 if (!html.includes('id="lodgingPreference"')) throw new Error("Single per-day lodging selection is missing");
 if (!html.includes('enqueueRouteRequest')) throw new Error("Rate-aware route request queue is missing");
+if (!html.includes('action: "reverse_geocode"')) throw new Error("Overnight town lookup is missing");
+if (!html.includes('applyOvernightStopName')) throw new Error("Resolved overnight towns are not applied to adjoining days");
+if (html.includes('Overnight stop')) throw new Error("Generic overnight stop labels are still present");
 if (!html.includes('OpenStreetMap')) throw new Error("OpenStreetMap route attribution is missing");
 if (!html.includes('target="_blank"')) throw new Error("External recommendation links are missing");
 if (!html.includes('Phone not listed')) throw new Error("Phone availability is not shown on cards");

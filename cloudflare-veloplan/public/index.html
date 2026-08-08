@@ -340,7 +340,9 @@
       tripGenerated: false,
       tripEndpoints: null,
       citySearchCache: new Map(),
-      citySessionTokens: { start: null, end: null }
+      citySessionTokens: { start: null, end: null },
+      stopNameCache: new Map(),
+      tripGenerationId: 0
     };
 
     const defaultLodgingByDay = ["camping", "hostel", "guest_house", "hotel"];
@@ -349,6 +351,7 @@
       day.demoProfile = [...day.profile];
       day.startPoint = [...day.route[0]];
       day.endPoint = [...day.route[day.route.length - 1]];
+      [day.startLabel, day.endLabel] = day.title.split(" → ");
       day.routeSource = "Demo";
       day.routeDistances = cumulativeRouteDistances(day.route);
       day.lodgingPreference = defaultLodgingByDay[index] || "hostel";
@@ -421,7 +424,7 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = `day-button${index === state.dayIndex ? " active" : ""}`;
-        button.innerHTML = `<span>Day ${index + 1}</span><small>${day.distance} km · ${escapeHtml(day.title.split(" → ")[1])}</small>`;
+        button.innerHTML = `<span>Day ${index + 1}</span><small>${day.distance} km · ${escapeHtml(day.endLabel || day.title.split(" → ")[1])}</small>`;
         button.addEventListener("click", () => selectDay(index));
         elements.dayList.appendChild(button);
       });
@@ -774,11 +777,15 @@
         }
         const routeData = await response.json();
         buildTripFromRoute(start, end, routeData);
+        const generationId = state.tripGenerationId;
         syncLodgingControl();
         renderDayButtons();
         renderDayHeading();
         renderElevation();
         if (state.mapsReady) drawMap();
+        void resolveOvernightStopNames(generationId).catch((error) => {
+          console.warn("Overnight town naming failed", error);
+        });
         await hydrateDay(0);
         toast(`Created a ${tripDays.length}-day bicycle trip.`);
       } catch (error) {
@@ -818,6 +825,11 @@
 
       const totalDuration = Number(routeData.durationSeconds || 0);
       const surfacePreference = selectedSurfacePreference();
+      const stopLabels = Array.from({ length: dayCount + 1 }, (_, stopIndex) => {
+        if (stopIndex === 0) return start.name;
+        if (stopIndex === dayCount) return end.name;
+        return `Overnight area ${stopIndex}`;
+      });
       const generatedDays = [];
       for (let dayIndex = 0; dayIndex < dayCount; dayIndex += 1) {
         const startIndex = cutIndices[dayIndex];
@@ -827,9 +839,11 @@
         const segmentMeters = distances[endIndex] - distances[startIndex];
         const elevations = segmentWithElevation.map((point) => point[2]).filter(Number.isFinite);
         const profile = elevations.length > 1 ? sampleValues(elevations, 256) : Array(32).fill(100);
-        const startLabel = dayIndex === 0 ? start.name : `Overnight stop ${dayIndex}`;
-        const endLabel = dayIndex === dayCount - 1 ? end.name : `Overnight stop ${dayIndex + 1}`;
+        const startLabel = stopLabels[dayIndex];
+        const endLabel = stopLabels[dayIndex + 1];
         const day = {
+          startLabel,
+          endLabel,
           title: `${startLabel} → ${endLabel}`,
           distance: Math.max(1, Math.round(segmentMeters / 1000)),
           ascent: calculateProfileAscent(elevations),
@@ -855,10 +869,60 @@
       tripDays.splice(0, tripDays.length, ...generatedDays);
       state.tripEndpoints = { start: { ...start }, end: { ...end } };
       state.tripGenerated = true;
+      state.tripGenerationId += 1;
       state.dayIndex = 0;
       state.selected = null;
       state.recommendations.clear();
       state.routePromises.clear();
+    }
+
+    async function resolveOvernightStopNames(generationId) {
+      for (let stopIndex = 1; stopIndex < tripDays.length; stopIndex += 1) {
+        if (generationId !== state.tripGenerationId) return;
+        const point = tripDays[stopIndex - 1].endPoint;
+        try {
+          const name = await fetchOvernightTownName(point);
+          if (generationId !== state.tripGenerationId) return;
+          applyOvernightStopName(stopIndex, name);
+        } catch (error) {
+          console.warn(`Overnight town ${stopIndex} could not be resolved`, error);
+          if (error.retryAfter) return;
+        }
+      }
+    }
+
+    async function fetchOvernightTownName(point) {
+      const cacheKey = `${Number(point[0]).toFixed(5)},${Number(point[1]).toFixed(5)}`;
+      if (state.stopNameCache.has(cacheKey)) return state.stopNameCache.get(cacheKey);
+      const response = await enqueueRouteRequest(() => fetch("/api/route", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reverse_geocode",
+          point: { latitude: point[0], longitude: point[1] }
+        })
+      }));
+      if (!response.ok) {
+        const error = new Error(`Overnight town request failed with ${response.status}`);
+        error.retryAfter = Number(response.headers.get("Retry-After") || 0);
+        throw error;
+      }
+      const data = await response.json();
+      const name = typeof data.name === "string" ? data.name.trim() : "";
+      if (!name) throw new Error("Overnight town response did not include a name");
+      state.stopNameCache.set(cacheKey, name);
+      return name;
+    }
+
+    function applyOvernightStopName(stopIndex, name) {
+      const arrivingDay = tripDays[stopIndex - 1];
+      const departingDay = tripDays[stopIndex];
+      arrivingDay.endLabel = name;
+      arrivingDay.title = `${arrivingDay.startLabel} → ${arrivingDay.endLabel}`;
+      departingDay.startLabel = name;
+      departingDay.title = `${departingDay.startLabel} → ${departingDay.endLabel}`;
+      renderDayButtons();
+      if (state.dayIndex === stopIndex - 1 || state.dayIndex === stopIndex) renderDayHeading();
     }
 
     function sampleValues(values, maximumCount) {

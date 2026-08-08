@@ -7,6 +7,7 @@ This project is the secure, full-stack version of the bicycle trip planner demo.
 - Three lunch, lodging, and sightseeing recommendations for every day when enough highly rated results exist.
 - Editable start and destination fields use Google’s city-specific autocomplete and show distinct choices when cities share a name.
 - A complete OSM bicycle route is divided into daily stages using the selected maximum daily distance.
+- Overnight stage endpoints are reverse-geocoded to nearby towns and shared consistently by the adjoining day cards and headings.
 - Detailed cross-border bicycle routes calculated by openrouteservice from OpenStreetMap data.
 - A live Google map with pan, zoom, detailed route geometry, and color-coded recommendation markers.
 - A 256-sample route elevation profile whose hover position moves along the real route on the map.
@@ -44,7 +45,7 @@ Use two separate keys:
 3. `OPENROUTESERVICE_API_KEY`
    - Create the key in the HeiGIT/openrouteservice account dashboard.
    - Store it only as an encrypted Cloudflare Worker secret.
-   - The browser spaces uncached calls two seconds apart, and the Worker caches identical routes for 24 hours to conserve the shared quota.
+   - The browser spaces uncached route and overnight-town calls two seconds apart, and the Worker caches identical results for 24 hours to conserve the shared quota.
 
 Never place either real value in this repository. If a real server key has ever been committed publicly, rotate it in Google Cloud.
 
@@ -83,4 +84,4 @@ Add all three required values under **Worker → Settings → Variables and Secr
 
 ## API safeguards
 
-The Worker limits searches and routes to Europe, accepts exactly one allowlisted lodging type per day, caps search radii, requires strong sightseeing ratings, uses fixed Google field masks, and rejects requests without the correct browser origin. Recommendation responses are not cached; repeated city lookups and identical OSM routes are cached for 24 hours to conserve provider quotas. The Cloudflare rate-limiting rule covers both `/api/places` and `/api/route`, including city lookup because it uses the protected Places endpoint.
+The Worker limits searches and routes to Europe, accepts exactly one allowlisted lodging type per day, caps search radii, requires strong sightseeing ratings, uses fixed Google field masks, and rejects requests without the correct browser origin. Recommendation responses are not cached; identical OSM routes and overnight-town lookups are cached for 24 hours to conserve provider quotas. The Cloudflare rate-limiting rule covers both `/api/places` and `/api/route`, including city lookup and overnight naming because they use those protected endpoints.
