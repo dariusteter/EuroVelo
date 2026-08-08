@@ -42,6 +42,8 @@ let citySearchRequestBody;
 let cityDetailsUrl;
 let routeRequestBody;
 let routeAuthorization;
+let reverseGeocodeUrl;
+let reverseGeocodeAuthorization;
 let routeRateLimited = false;
 globalThis.fetch = async (input, init = {}) => {
   const url = String(input);
@@ -78,6 +80,20 @@ globalThis.fetch = async (input, init = {}) => {
         googlePlace("Guest Rooms", "guest_house", "+421 2 555 0102", "https://guest.example"),
         googlePlace("Fancy Hotel", "hotel", "+421 2 555 0103", "https://hotel.example")
       ]
+    });
+  }
+  if (url.includes("api.heigit.org/pelias/v1/reverse")) {
+    reverseGeocodeUrl = url;
+    reverseGeocodeAuthorization = new Headers(init.headers).get("Authorization");
+    return Response.json({
+      features: [{
+        properties: {
+          name: "Test Street",
+          layer: "street",
+          locality: "Ansbach",
+          county: "Ansbach"
+        }
+      }]
     });
   }
   if (url.includes("api.heigit.org/openrouteservice")) {
@@ -173,6 +189,20 @@ try {
   assert(routeAuthorization === "heigit-test-key", "route key should stay in the Worker authorization header");
   assert(routeData.routeProvider.includes("OpenStreetMap"), "route should identify its OSM data source");
 
+  const stopNameResponse = await worker.fetch(new Request("https://planner.example.test/api/route", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Origin": "https://planner.example.test" },
+    body: JSON.stringify({
+      action: "reverse_geocode",
+      point: { latitude: 49.3, longitude: 10.57 }
+    })
+  }), env);
+  const stopNameData = await stopNameResponse.json();
+  assert(stopNameResponse.status === 200, "overnight town lookup should return 200");
+  assert(stopNameData.name === "Ansbach", "overnight waypoint should use the nearest locality rather than a street");
+  assert(reverseGeocodeUrl.includes("point.lat=49.3") && reverseGeocodeUrl.includes("point.lon=10.57"), "reverse geocoder should receive the waypoint coordinates");
+  assert(reverseGeocodeAuthorization === "heigit-test-key", "reverse geocoder key should stay in the Worker authorization header");
+
   routeRateLimited = true;
   const limitedRouteResponse = await worker.fetch(new Request("https://planner.example.test/api/route", {
     method: "POST",
@@ -194,7 +224,7 @@ const assetResponse = await worker.fetch(new Request("https://planner.example.te
 assert(assetResponse.headers.get("X-Content-Type-Options") === "nosniff", "asset responses should include security headers");
 assert(assetResponse.headers.get("Referrer-Policy") === "strict-origin-when-cross-origin", "asset responses should preserve an origin referrer for Maps key restrictions");
 
-console.log("Worker routes OK: config, origin guard, preference filtering, detailed route, elevation, assets");
+console.log("Worker routes OK: config, origin guard, preference filtering, detailed route, elevation, overnight names, assets");
 
 function googlePlace(name, primaryType, phone, websiteUri, rating = 4.7, userRatingCount = 321) {
   return {

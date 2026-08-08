@@ -2,6 +2,7 @@ const GOOGLE_NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby"
 const GOOGLE_AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete";
 const GOOGLE_PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places";
 const OPENROUTESERVICE_DIRECTIONS_URL = "https://api.heigit.org/openrouteservice/v2/directions";
+const OPENROUTESERVICE_REVERSE_GEOCODE_URL = "https://api.heigit.org/pelias/v1/reverse";
 const MAX_BODY_BYTES = 2048;
 const ALLOWED_KINDS = new Set(["lunch", "lodging", "attraction", "city", "city_details"]);
 const ALLOWED_SURFACE_PREFERENCES = new Set(["bike_paths", "gravel", "quiet_roads"]);
@@ -280,6 +281,10 @@ async function handleRoute(request, env, ctx) {
     return json({ error: "Request body must be valid JSON." }, 400);
   }
 
+  if (body?.action === "reverse_geocode") {
+    return await handleReverseGeocode(request, env, ctx, body);
+  }
+
   const validation = validateRouteRequest(body);
   if (!validation.ok) {
     return json({ error: validation.error }, 400);
@@ -368,12 +373,97 @@ async function handleRoute(request, env, ctx) {
   return response;
 }
 
+async function handleReverseGeocode(request, env, ctx, body) {
+  const point = validateEuropePoint(body.point);
+  if (!point) {
+    return json({ error: "The overnight waypoint must be a valid location in Europe." }, 400);
+  }
+
+  const cache = typeof caches === "undefined" ? null : caches.default;
+  const cacheKey = reverseGeocodeCacheKey(request, point);
+  const cachedResponse = cache ? await cache.match(cacheKey) : null;
+  if (cachedResponse) {
+    return cloneWithHeaders(cachedResponse, {
+      "Cache-Control": "private, max-age=3600",
+      "X-Stop-Name-Cache": "HIT"
+    });
+  }
+
+  const reverseUrl = new URL(OPENROUTESERVICE_REVERSE_GEOCODE_URL);
+  reverseUrl.searchParams.set("point.lat", String(point.latitude));
+  reverseUrl.searchParams.set("point.lon", String(point.longitude));
+  reverseUrl.searchParams.set("size", "1");
+  reverseUrl.searchParams.set("lang", "en");
+  const geocodeResponse = await fetch(reverseUrl, {
+    headers: { "Authorization": env.OPENROUTESERVICE_API_KEY }
+  });
+
+  if (!geocodeResponse.ok) {
+    console.error(JSON.stringify({
+      event: "openrouteservice_reverse_geocode_error",
+      status: geocodeResponse.status
+    }));
+    if (geocodeResponse.status === 429) {
+      const retryAfter = boundedRetryAfter(geocodeResponse.headers.get("Retry-After"));
+      return json({ error: "The overnight town lookup is busy. Please try again shortly." }, 429, {
+        "Retry-After": String(retryAfter)
+      });
+    }
+    return json({ error: "The overnight town could not be identified right now." }, 502);
+  }
+
+  const data = await geocodeResponse.json();
+  const feature = Array.isArray(data.features) ? data.features[0] : null;
+  const name = stopNameFromFeature(feature);
+  if (!name) {
+    return json({ error: "No nearby town was found for this overnight waypoint." }, 404);
+  }
+
+  const payload = { name };
+  const response = json(payload, 200, {
+    "Cache-Control": "private, max-age=3600",
+    "X-Stop-Name-Cache": "MISS"
+  });
+  if (cache) {
+    const cacheWrite = cache.put(cacheKey, json(payload, 200, {
+      "Cache-Control": "public, max-age=86400"
+    }));
+    if (ctx) ctx.waitUntil(cacheWrite);
+    else await cacheWrite;
+  }
+  return response;
+}
+
 function routeCacheKey(request, origin, destination, profile) {
   const url = new URL("/__route-cache", request.url);
   url.searchParams.set("origin", `${origin.latitude.toFixed(5)},${origin.longitude.toFixed(5)}`);
   url.searchParams.set("destination", `${destination.latitude.toFixed(5)},${destination.longitude.toFixed(5)}`);
   url.searchParams.set("profile", profile);
   return new Request(url, { method: "GET" });
+}
+
+function reverseGeocodeCacheKey(request, point) {
+  const url = new URL("/__stop-name-cache", request.url);
+  url.searchParams.set("point", `${point.latitude.toFixed(5)},${point.longitude.toFixed(5)}`);
+  return new Request(url, { method: "GET" });
+}
+
+function stopNameFromFeature(feature) {
+  const properties = feature?.properties;
+  if (!properties || typeof properties !== "object") return "";
+  const administrativeName = [
+    properties.locality,
+    properties.localadmin,
+    properties.borough,
+    properties.county,
+    properties.region
+  ].find((value) => typeof value === "string" && value.trim().length > 0);
+  if (administrativeName) return administrativeName.trim().slice(0, 100);
+  const administrativeLayers = new Set(["locality", "localadmin", "borough", "county", "region"]);
+  if (administrativeLayers.has(String(properties.layer)) && typeof properties.name === "string") {
+    return properties.name.trim().slice(0, 100);
+  }
+  return "";
 }
 
 function cloneWithHeaders(response, extraHeaders) {
